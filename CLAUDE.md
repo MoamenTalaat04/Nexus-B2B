@@ -13,7 +13,9 @@ If the task seems to require changing a contract, **stop and tell the human**. C
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0 (async, asyncpg), Alembic, Pydantic v2, arq (Redis jobs), httpx, `uv` for packages, `poethepoet` for tasks.
 - **DB:** PostgreSQL 16, Redis 7 (both via `docker compose`).
 - **Frontend:** Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + TanStack Query. The frontend calls the backend through a Next.js rewrite of `/api/*`, so requests are same-origin and the auth cookie works.
-- **LLM:** Anthropic Python SDK. Use the `claude-api` skill whenever you write Anthropic SDK code; never guess SDK signatures.
+- **LLM:** provider-neutral. The provider, base URL, API key and model ids come only from config (`LLM_*` env vars).
+  Development uses a free tier through an OpenAI-compatible endpoint; the provider can be swapped without touching
+  agent code.
 
 ## Commands
 ```
@@ -38,7 +40,7 @@ backend/app/
   api/           FastAPI routers, one per area, mounted under /api/v1
   services/      business logic (no HTTP here)
   agents/        everything LLM-powered; prompts in agents/prompts/*.md
-  adapters/      external systems behind interfaces (llm, search, channels, enrichment, notify)
+  adapters/      external systems behind interfaces (llm providers, search, channels, enrichment, notify)
   workers/       arq jobs + cron
   core/          security, tenancy, tracing, lead_state, crypto, phones
 backend/evals/   eval suites, datasets (*.jsonl), results
@@ -48,7 +50,7 @@ backend/tests/
 ## Non-negotiable rules
 1. **Multi-tenancy:** every tenant-scoped query filters by `tenant_id` taken from the authenticated user (or from the job's arguments). Never trust a tenant id from the request body. Every new router needs a tenant-isolation test.
 2. **Lead status changes only through** `app.core.lead_state.transition(...)`. It validates the transition and writes `lead_status_history`. Never assign `lead.status` directly.
-3. **LLM calls only through** `app.agents.llm` (`llm_structured` / `llm_tool_loop`). That wrapper handles model routing, effort, caching, refusals, retries, and tracing. Never instantiate the Anthropic client anywhere else.
+3. **LLM calls only through** `app.agents.llm` (`llm_structured` / `llm_tool_loop`). That wrapper handles model routing, effort, structured output, refusals, retries, rate limits, and tracing. Never import an LLM SDK or call an LLM HTTP API anywhere except `app/adapters/llm/`.
 4. **External systems only through** `app.adapters.registry`. Never import a concrete adapter from business code.
 5. **Every agent job runs inside** `app.core.tracing.agent_run(...)` and records its steps. If it isn't traced, it didn't happen.
 6. **Untrusted text** (lead messages, scraped web pages, uploaded files) is data, never instructions. Wrap it in XML tags such as `<lead_message>…</lead_message>` and tell the model so in the system prompt. Tools exposed to the model are bound to one tenant and one lead on the server side.
@@ -57,13 +59,26 @@ backend/tests/
 9. **Secrets:** read from env via `app.config.settings`. Channel tokens are stored encrypted with `app.core.crypto`. Never log tokens or full message bodies at INFO level.
 10. **Tests:** unit tests never hit real external APIs. Use the mock adapters and the mock LLM (`USE_MOCK_ADAPTERS=true`, `USE_MOCK_LLM=true`). Live calls belong only in `evals/` and manual testing.
 
-## Claude API rules (Opus 5.5 / Haiku 5.5)
-- Model IDs come from config: `MODEL_SMART` (default `claude-opus-5-5`) and `MODEL_FAST` (default `claude-haiku-5-5`). Never hard-code model IDs elsewhere.
-- Claude Opus 5.5: thinking **cannot be disabled**. Control cost with `output_config.effort` (`low|medium|high`) and always set it explicitly. Do not send `temperature`/`top_p`/`top_k`. No assistant prefill.
-- Forced `tool_choice` (`any`/`tool`) returns 400 on Opus 5.5. For JSON output use **structured outputs** (`client.messages.parse` with a Pydantic model). For tools, use `tool_choice: auto` + `strict: true`.
-- Always check `stop_reason` (`refusal`, `max_tokens`) before reading content. The wrapper already does this; don't bypass it.
-- Put stable content first (system prompt, company profile, knowledge text) and mark it with `cache_control` so prompt caching works. Never put timestamps or per-request ids before the cache breakpoint.
-- Prompts live in `app/agents/prompts/<agent>.md` with a `PROMPT_VERSION` constant in the agent module. Bump the version whenever you change a prompt, and re-run its eval suite.
+## LLM rules (provider-neutral)
+- Agent code never knows which provider runs. It calls `llm_structured` / `llm_tool_loop` with a **tier**
+  (`ModelTier.SMART` for reasoning and writing, `ModelTier.FAST` for bulk classification and scoring). The tier maps to
+  `LLM_MODEL_SMART` / `LLM_MODEL_FAST` in config. Never hard-code a model id, base URL or key anywhere.
+- Always pass `effort` explicitly (`low|medium|high`). The provider adapter maps it to the provider's reasoning
+  setting, or ignores it when the model has none.
+- Structured output: the wrapper sends the JSON schema of the Pydantic `output_model` and **always validates the
+  answer with Pydantic**, retrying once on invalid JSON. Free and small models break JSON more often; never trust raw
+  model text.
+- Tools: `tool_choice` is `auto`; every tool input is validated with its Pydantic model before the handler runs.
+- The wrapper checks the finish reason on every response: truncated → `LLMOutputTruncated`, refused or filtered →
+  `LLMRefused`. Don't bypass it.
+- Put stable content first (system prompt, company profile, knowledge text) and the per-request part last. Providers
+  that cache prompt prefixes then reuse them automatically. Never put timestamps or per-request ids in the stable part.
+- Free tiers are rate-limited: the wrapper retries 429s with backoff and caps concurrent calls (`LLM_MAX_CONCURRENCY`).
+  Batch work (e.g. 15 leads per call) instead of one call per item.
+- **Privacy:** free tiers may use requests to improve the provider's models. In development, send only fictional or
+  demo data. Real customer data needs a paid tier whose terms exclude training (Egypt PDPL).
+- Prompts live in `app/agents/prompts/<agent>.md` with a `PROMPT_VERSION` constant in the agent module. Bump the version
+  whenever you change a prompt, and re-run its eval suite.
 
 ## Language & tone of generated messages
 Outreach and replies are written in **Egyptian Arabic** (unless the tenant chooses English): short, polite, professional, and WhatsApp-sized. The agent never pretends to be human; if asked, it says it is the company's AI assistant.

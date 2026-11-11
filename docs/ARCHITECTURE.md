@@ -25,7 +25,7 @@ The reference "B2B Growth Engine" glues together a dozen SaaS tools and needs a 
 - **Testability:** each LLM node has a typed input/output (structured outputs), so it can be unit-tested with mocks and **evaluated** with datasets.
 - **Safety:** humans can gate the steps that matter (sending) without stopping the rest.
 
-**Where we do use a true agent loop:** the **Reply Agent** (P3-4). Conversations are open-ended, so Claude gets a small set of scoped tools and decides what to do, inside guardrails.
+**Where we do use a true agent loop:** the **Reply Agent** (P3-4). Conversations are open-ended, so the model gets a small set of scoped tools and decides what to do, inside guardrails.
 
 ## 3. The daily cycle
 
@@ -99,7 +99,8 @@ Every job opens an `agent_run` and writes `agent_steps` (LLM call, tool call, ex
 | Prompt injection from lead messages / web pages | XML-wrapped untrusted content, tools bound to one lead server-side, no tool can change settings, safety eval suite |
 | Agent inventing prices or discounts | Reply agent answers only from the company profile + knowledge; discount above `max_discount_percent` → escalate |
 | Spamming people who said stop | `opted_out` is terminal and checked at send time |
-| Runaway cost | Model routing, prompt caching, effort settings, per-run cost tracking |
+| Runaway cost | Model routing (smart vs fast tier), free tier in development, stable prompt prefixes for provider caching, effort settings, per-run cost tracking |
+| Provider lock-in | Every LLM call goes through `app/adapters/llm/`; switching provider is a config change |
 | Legal (Egypt PDPL 151/2020) | Record source of every contact, honor opt-out, store only business contact data |
 
 ## 8. Future (not in this month)

@@ -6,59 +6,76 @@
 
 ---
 
-## P0-3 · LLM wrapper, pricing, tracing & runs API ⭐ SHOWCASE — Wed Nov 11 → Fri Nov 13
+## P0-3 · LLM wrapper, provider adapter, pricing, tracing & runs API ⭐ SHOWCASE — Wed Nov 11 → Fri Nov 13
 **Why it matters for the discussion:** this is the backbone of two showcases. *Tracing* makes every agent step visible,
-and *model routing + caching* is the cost story.
-**Files you own:** `backend/app/agents/llm.py`, `backend/app/agents/pricing.py`, `backend/app/core/tracing.py`, `backend/app/api/runs.py` (GET /runs, GET /runs/{id}), `backend/tests/fixtures/llm/`, `backend/app/agents/README.md`, tests.
+and *model routing + a provider-neutral adapter* is the cost story (we develop on a free tier and can switch provider
+with a config change).
+**Files you own:** `backend/app/agents/llm.py`, `backend/app/adapters/llm/*`, `backend/app/agents/pricing.py`, `backend/app/core/tracing.py`, `backend/app/api/runs.py` (GET /runs, GET /runs/{id}), `backend/tests/fixtures/llm/`, `backend/app/agents/README.md`, tests.
+**Key:** A creates the free LLM key on Day 1. Until then, everything runs on the mock LLM.
 
 ~~~text
-Read CLAUDE.md, docs/ARCHITECTURE.md and docs/CONTRACTS.md (§5 tracing, §6 LLM layer) completely.
-Use the claude-api skill for all Anthropic SDK code — do not guess SDK signatures. The model IDs come from
-settings.MODEL_SMART ("claude-opus-5-5") and settings.MODEL_FAST ("claude-haiku-5-5").
+Read CLAUDE.md (especially "LLM rules"), docs/ARCHITECTURE.md and docs/CONTRACTS.md (§5 tracing, §6 LLM layer and
+provider adapters) completely.
 
 Build the layer that every agent task depends on. The other 3 teammates start using it on Saturday, so the
-signatures must match CONTRACTS.md exactly. (A is building the adapter layer in parallel; you don't need it.)
+signatures must match CONTRACTS.md exactly. (A is building the other adapters in parallel; you don't need them.)
+The code must not know which LLM provider is used: provider, base URL, key and model ids come only from settings
+(LLM_PROVIDER, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL_SMART, LLM_MODEL_FAST, LLM_MAX_CONCURRENCY).
 
 1. app/core/tracing.py: RunContext, agent_run(...) and create_queued_run(...) exactly as in CONTRACTS §5. Trace
    writes use their own short DB session/transaction so traces survive even when the job's main transaction rolls
    back. Errors inside the context mark the run failed, store the error text, record an ERROR step, and re-raise.
    Aggregate tokens and cost on exit. Steps must truncate big payloads (max 20 KB of JSON per field) and mask phone
    numbers (keep the last 3 digits).
-2. app/agents/pricing.py: a price table (USD per 1M tokens: input, output, cache_read, cache_write) for
-   claude-opus-5-5 and claude-haiku-5-5. Take every price from the claude-api skill or the Anthropic pricing page
-   (don't trust numbers from memory) and leave a comment with the date and source. cost_usd(model, usage).
-3. app/agents/llm.py: llm_structured and llm_tool_loop exactly as in CONTRACTS §6, using the official anthropic
-   AsyncAnthropic client (one module-level client):
-   - tier → model id from settings; always set output_config effort explicitly; never send temperature/top_p/top_k;
-     no assistant prefill; thinking is adaptive (Opus 5.5 cannot disable it).
-   - llm_structured: structured outputs via client.messages.parse with the Pydantic output_model.
-     System prompt + cached_context go in the system blocks with a cache_control breakpoint after cached_context; the
-     user text comes after it.
+2. app/adapters/llm/: base.py with LLMUsage, LLMResult and the LLMProvider Protocol from CONTRACTS §6;
+   openai_compatible.py implementing it with the official `openai` Python SDK (AsyncOpenAI with base_url and api_key
+   from settings) so it works with any OpenAI-compatible Chat Completions endpoint:
+   - system + cached_context become the first system message(s), stable and first; the volatile messages follow.
+   - json_schema → response_format {"type": "json_schema", "json_schema": {..., "strict": true}}; if the provider
+     rejects strict schemas, fall back to {"type": "json_object"} with the schema described in the system message.
+   - tools → the "function" tool format; parse tool_calls arguments from JSON.
+   - effort → `reasoning_effort` only when settings say the model supports it; otherwise don't send it.
+   - finish_reason: "length" → finish="length"; "content_filter" (or an explicit refusal field) → "refused";
+     "tool_calls" → "tool_calls"; else "stop". usage → LLMUsage (cached_input_tokens from
+     usage.prompt_tokens_details.cached_tokens when the provider reports it, else 0).
+   __init__.py: get_llm_provider() picks the adapter from settings.LLM_PROVIDER and raises a clear error for an
+   unknown name or a missing LLM_BASE_URL/LLM_API_KEY. Read the provider's current docs for the exact
+   OpenAI-compatibility details (supported fields differ between providers); don't guess.
+3. app/agents/pricing.py: a price table (USD per 1M tokens: input, output, cached input) keyed by model id, with
+   the paid list prices of the models in .env (comment with the date and source page). Free-tier usage is still
+   priced at the paid list price and labelled "estimated" so the reports stay meaningful. cost_usd(model, usage).
+4. app/agents/llm.py: llm_structured and llm_tool_loop exactly as in CONTRACTS §6, on top of get_llm_provider():
+   - tier → settings.LLM_MODEL_SMART / LLM_MODEL_FAST; effort always passed through.
+   - llm_structured: send the output_model's JSON schema, validate the reply with Pydantic, retry once with the
+     validation error appended if it fails, then raise.
    - llm_tool_loop: a manual loop (so we can trace each turn): tools built from ToolSpec (JSON schema from the
-     Pydantic input_model, strict: true, additionalProperties false), tool_choice auto, execute the tool calls (in
-     parallel if several), return all tool_result blocks in one user message, is_error results for exceptions, stop
-     at end_turn or max_iterations. Validate each tool input with the Pydantic model before calling the handler.
-   - Check stop_reason on every response: "refusal" → raise LLMRefused (and record it); "max_tokens" → raise
-     LLMOutputTruncated. Enable the server-side refusal fallback for the Opus model as the claude-api skill
-     recommends, and say in your summary what you enabled.
-   - Retry rate-limit/overloaded/5xx/connection errors with exponential backoff (max 3), never 400s.
-   - Record one LLM_CALL step per model call: model, tokens incl. cache_read_input_tokens, cost, latency, lead_id,
-     the input (system prompt name + PROMPT_VERSION + the user text, truncated) and the output.
+     Pydantic input_model), tool_choice auto, execute the tool calls (in parallel if several), append one tool
+     message per call, is_error-style content for exceptions, stop at a final answer or max_iterations. Validate each
+     tool input with the Pydantic model before calling the handler.
+   - finish "refused" → raise LLMRefused (and record it); "length" → raise LLMOutputTruncated.
+   - Retry 429/5xx/connection errors with exponential backoff and jitter (max 4, respect Retry-After), never 400s.
+     An asyncio.Semaphore(settings.LLM_MAX_CONCURRENCY) caps concurrent calls, because free tiers are rate-limited.
+   - Record one LLM_CALL step per model call: provider, model, tokens incl. cached input tokens, estimated cost,
+     latency, lead_id, the input (system prompt name + PROMPT_VERSION + the user text, truncated) and the output.
    - Mock mode (settings.USE_MOCK_LLM): as described in CONTRACTS §6 (fixture file by name, else polyfactory with a
      seed derived from name). Still record a step with model "mock" and zero cost.
-4. app/api/runs.py: GET /api/v1/runs?kind=&status=&page= (list) and GET /api/v1/runs/{id} (run + ordered steps).
+5. app/api/runs.py: GET /api/v1/runs?kind=&status=&page= (list) and GET /api/v1/runs/{id} (run + ordered steps).
    Tenant-scoped. The router is auto-mounted: just expose `router` in the module.
-5. Tests: tracing (success, failure, truncation, phone masking, survives a rollback), llm wrapper with the Anthropic
-   HTTP layer mocked by respx (structured output parsed, refusal raises, max_tokens raises, retry on 529/429, no retry
-   on 400, the cache_control placement in the request body, the tool loop with 2 tool calls in one turn), the mock
-   mode, the runs API + tenant isolation.
+6. Add `openai` to backend/pyproject.toml (uv add openai) and the LLM_* settings to app/config.py and .env.example
+   if anything is missing.
+7. Tests: tracing (success, failure, truncation, phone masking, survives a rollback); the openai_compatible adapter
+   with the HTTP layer mocked by respx (JSON-schema request body, tool-call parsing, finish reasons, usage mapping
+   incl. cached tokens); the wrapper (valid output parsed, invalid JSON retried once then raises, refusal raises,
+   length raises, retry on 429/503, no retry on 400, the concurrency cap, the stable part first in the request, the
+   tool loop with 2 tool calls in one turn); the mock mode; the runs API + tenant isolation.
 
 Finally write backend/app/agents/README.md: "How to write an agent in this repo" (prompt file + PROMPT_VERSION,
 llm_structured vs llm_tool_loop, tiers and effort guidance: FAST+low for bulk classification/scoring, SMART+medium for
-reasoning/writing, untrusted content wrapping, how to add an eval). Every teammate's agent will read this. Run poe check.
+reasoning/writing, batching to respect free-tier limits, untrusted content wrapping, how to add an eval, how to switch
+provider). Every teammate's agent will read this. Run poe check.
 ~~~
-**Definition of done:** a teammate can write `await llm_structured(run, name="x", tier=ModelTier.FAST, …)` and see the step with tokens and cost in `GET /runs/{id}`. The mock LLM makes the whole app runnable offline.
-**Self-check before you push:** make one real call with the key and confirm `cache_read_tokens > 0` on the second identical call.
+**Definition of done:** a teammate can write `await llm_structured(run, name="x", tier=ModelTier.FAST, …)` and see the step with tokens and estimated cost in `GET /runs/{id}`. Changing only `.env` switches the provider. The mock LLM makes the whole app runnable offline.
+**Self-check before you push:** make one real call with the free key for each tier; check that structured output parses and that a tool call works; send 10 calls at once and confirm the concurrency cap and the 429 retry keep it from failing.
 
 ---
 

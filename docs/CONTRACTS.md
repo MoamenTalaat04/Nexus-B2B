@@ -147,7 +147,7 @@ async def get_settings_for(session, tenant_id) -> BusinessSettings
 ## 6. LLM layer (`app/agents/llm.py`, P0-3)
 
 ```python
-class ModelTier(StrEnum): SMART = "smart"; FAST = "fast"   # → settings.MODEL_SMART / MODEL_FAST
+class ModelTier(StrEnum): SMART = "smart"; FAST = "fast"   # → settings.LLM_MODEL_SMART / LLM_MODEL_FAST
 Effort = Literal["low", "medium", "high"]
 
 async def llm_structured(run: RunContext, *, name: str, tier: ModelTier, system: str,
@@ -155,7 +155,8 @@ async def llm_structured(run: RunContext, *, name: str, tier: ModelTier, system:
                          effort: Effort = "medium", max_tokens: int = 8000,
                          lead_id: UUID | None = None) -> T
     # system + cached_context form a cached prefix; user is the volatile part.
-    # Uses structured outputs; checks stop_reason; retries rate-limit/5xx; records one agent_step.
+    # Sends the output_model's JSON schema; validates the answer with Pydantic (one retry on invalid JSON);
+    # checks the finish reason; retries 429/5xx with backoff; records one agent_step.
 
 @dataclass
 class ToolSpec:
@@ -170,14 +171,43 @@ async def llm_tool_loop(run: RunContext, *, name: str, tier: ModelTier, system: 
                         messages: list[dict], tools: list[ToolSpec], cached_context: str | None = None,
                         effort: Effort = "medium", max_iterations: int = 6,
                         lead_id: UUID | None = None) -> ToolLoopResult
-    # tool_choice=auto, strict tools; records an llm_call step per model turn and a tool_call step per tool.
+    # tool_choice=auto; tool inputs validated with Pydantic; records an llm_call step per model turn and a
+    # tool_call step per tool.
 
 class LLMRefused(Exception): ...
 class LLMOutputTruncated(Exception): ...
 ```
 When `USE_MOCK_LLM=true`: `llm_structured` returns a deterministic instance built from `output_model` (polyfactory, seeded by `name`) unless a fixture exists at `backend/tests/fixtures/llm/<name>.json`. `llm_tool_loop` returns a fixed result with no tool calls.
 
-Cost is computed from the token usage with a price table in `app/agents/pricing.py` (USD per 1M tokens: input, output, cache read), keyed by model id.
+Cost is computed from the token usage with a price table in `app/agents/pricing.py` (USD per 1M tokens: input, output, cached input), keyed by model id. For a model used on a free tier, the table holds the provider's **paid** list price, so reports show what the same work would cost at scale (labelled "estimated"). Unknown model → cost 0 and a warning in the log.
+
+### Provider adapters (`app/adapters/llm/`, P0-3)
+`llm.py` never talks to a provider directly; it calls the provider chosen by `settings.LLM_PROVIDER`:
+```python
+class LLMUsage(BaseModel):
+    input_tokens: int; output_tokens: int; cached_input_tokens: int = 0
+
+class LLMResult(BaseModel):
+    text: str | None                     # final text (None when the model only called tools)
+    tool_calls: list[dict]               # [{"id", "name", "arguments": dict}]
+    finish: Literal["stop", "tool_calls", "length", "refused"]
+    usage: LLMUsage; model: str; raw: dict  # raw = provider response, for the trace
+
+class LLMProvider(Protocol):
+    name: str
+    async def complete(self, *, model: str, system: str, cached_context: str | None,
+                       messages: list[dict], effort: Effort, max_tokens: int,
+                       json_schema: dict | None = None, tools: list[dict] | None = None) -> LLMResult: ...
+
+def get_llm_provider() -> LLMProvider     # app/adapters/llm/__init__.py; reads settings.LLM_PROVIDER
+```
+- `openai_compatible` (the default): one adapter for every provider with an OpenAI-compatible Chat Completions
+  endpoint (e.g. Google Gemini, Groq, OpenRouter, a local Ollama, OpenAI). Configured only through `LLM_BASE_URL`,
+  `LLM_API_KEY`, `LLM_MODEL_SMART`, `LLM_MODEL_FAST`.
+- Other providers (e.g. a native Anthropic adapter) can be added later as another module implementing `LLMProvider`.
+  No agent code changes.
+- Messages use one neutral shape: `{"role": "user"|"assistant", "content": str}` plus
+  `{"role": "assistant", "tool_calls": [...]}` and `{"role": "tool", "tool_call_id": str, "content": str}`.
 
 ## 7. Adapter interfaces (`app/adapters/base.py`, P0-1)
 
@@ -372,9 +402,12 @@ ENCRYPTION_KEY=                      # Fernet key: python -c "from cryptography.
 PUBLIC_BASE_URL=https://<your-tunnel>.trycloudflare.com
 USE_MOCK_ADAPTERS=true
 USE_MOCK_LLM=true
-ANTHROPIC_API_KEY=
-MODEL_SMART=claude-opus-5-5
-MODEL_FAST=claude-haiku-5-5
+LLM_PROVIDER=openai_compatible       # which adapter in app/adapters/llm/ to use
+LLM_BASE_URL=                        # the provider's OpenAI-compatible endpoint (see docs/setup-accounts.md)
+LLM_API_KEY=
+LLM_MODEL_SMART=                     # model for reasoning and writing
+LLM_MODEL_FAST=                      # cheaper/faster model for bulk scoring and classification
+LLM_MAX_CONCURRENCY=2                # free tiers are rate-limited
 GOOGLE_PLACES_API_KEY=
 WHATSAPP_APP_SECRET=                 # Meta app secret (webhook signature)
 WHATSAPP_VERIFY_TOKEN=               # any random string, same as in the Meta dashboard

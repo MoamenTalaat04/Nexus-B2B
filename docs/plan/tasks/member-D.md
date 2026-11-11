@@ -68,7 +68,7 @@ Part 2 — backend/evals harness (used by the whole team):
 5. evals/run.py: `python -m evals.run <suite> [--limit N] [--tier smart|fast] [--repeat K]`. A suite is a module in
    evals/suites/<name>.py exposing `async def run_case(case: dict, ctx) -> dict` and
    `def summarize(results: list[dict]) -> dict`, plus a DATASET path. The harness: loads the JSONL, runs the cases
-   with concurrency 4, real LLM (forces USE_MOCK_LLM=false; refuses to run without ANTHROPIC_API_KEY), wraps
+   with concurrency 4, real LLM (forces USE_MOCK_LLM=false; refuses to run without LLM_API_KEY; respects LLM_MAX_CONCURRENCY because of free-tier limits), wraps
    everything in an agent_run on a dedicated "eval" tenant so the cost is traced, prints a table, and writes
    evals/results/<suite>-<timestamp>.json (with prompt versions, model, cost, per-case outputs). `--compare <file>`
    prints the metric deltas against a previous result.
@@ -132,15 +132,15 @@ Run poe check and npm run check. Take screenshots of /leads and /activity/[id] w
 ---
 
 ## P3-4 · Reply Agent: classification + tool-using conversation + guardrails ⭐⭐ MAIN SHOWCASE — Tue Nov 24 → Mon Nov 30
-**Why it matters for the discussion:** this is the **true agent** in our system. Claude reads the lead's reply, decides what to do, and acts through tools, inside guardrails that are **proven by evals** (including prompt-injection attempts). Plan to spend most of the presentation's agent explanation here.
+**Why it matters for the discussion:** this is the **true agent** in our system. The model reads the lead's reply, decides what to do, and acts through tools, inside guardrails that are **proven by evals** (including prompt-injection attempts). Plan to spend most of the presentation's agent explanation here.
 **Files you own:** `backend/app/agents/reply_classifier.py`, `backend/app/agents/reply_agent.py`, `backend/app/agents/prompts/reply_classifier.md`, `backend/app/agents/prompts/reply_agent.md`, `backend/app/agents/reply_tools.py`, `backend/app/workers/jobs/inbound.py` (replaces B's stub job_handle_inbound), `backend/app/services/notifications.py` (minimal notify_owner; you extend it in P4-2), `backend/evals/suites/reply_*.py`, `backend/evals/datasets/reply_*.jsonl`, tests.
 **Depends on:** B's `services/messaging.py` (Day 1 of P3) and C's `services/autonomy.py`; code against the contract until they merge.
 
 ~~~text
 Read CLAUDE.md, backend/app/agents/README.md, docs/ARCHITECTURE.md (§2, §7) and docs/CONTRACTS.md (§2
 ReplyIntent + the intent→status mapping, §4 transitions, §6 llm_tool_loop/ToolSpec, §8 ReplyClassification,
-§9 messaging/autonomy/notifications/knowledge, §10 job_handle_inbound) first. Use the claude-api skill whenever you need
-to reason about tool use; call the model only through app.agents.llm.
+§9 messaging/autonomy/notifications/knowledge, §10 job_handle_inbound) first. Call the model only through app.agents.llm
+(llm_tool_loop for this agent); never call a provider SDK or API directly.
 
 Build the agent that handles every inbound WhatsApp reply from a lead, in Egyptian Arabic.
 

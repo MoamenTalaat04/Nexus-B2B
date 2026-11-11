@@ -37,7 +37,7 @@ The design follows the "B2B Growth Engine" reference architecture (intent data, 
 | Background jobs | arq on Redis (cron in Africa/Cairo time) |
 | Database | PostgreSQL 16, Redis 7 (Docker Compose) |
 | Frontend | Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui, TanStack Query |
-| LLM | Anthropic API: Claude Opus 5.5 for reasoning, Claude Haiku 5.5 for bulk work |
+| LLM | Provider-neutral adapter (any OpenAI-compatible API). Development uses a free tier; a "smart" model for reasoning and a "fast" model for bulk work, both set in `.env` |
 | Lead source | Google Places API (New) |
 | Outreach channel | WhatsApp Cloud API (official) |
 | Owner notifications | Telegram bot |
@@ -130,7 +130,7 @@ backend/
     api/           routers (one per area)
     services/      business logic
     agents/        LLM-powered agents; prompts in agents/prompts/*.md
-    adapters/      external systems behind interfaces (LLM, search, WhatsApp, enrichment, notify)
+    adapters/      external systems behind interfaces (LLM providers, search, WhatsApp, enrichment, notify)
     workers/       arq worker; jobs in workers/jobs/*.py (any async job_* is auto-registered)
     core/          errors, security, tenancy, tracing, lead state machine, crypto, phones
   alembic/         migrations

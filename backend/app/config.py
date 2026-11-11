@@ -32,10 +32,13 @@ class Settings(BaseSettings):
     USE_MOCK_ADAPTERS: bool = True
     USE_MOCK_LLM: bool = True
 
-    # LLM
-    ANTHROPIC_API_KEY: str = ""
-    MODEL_SMART: str = "claude-opus-5-5"
-    MODEL_FAST: str = "claude-haiku-5-5"
+    # LLM (provider-neutral; see docs/CONTRACTS.md section 6 and docs/setup-accounts.md)
+    LLM_PROVIDER: str = "openai_compatible"
+    LLM_BASE_URL: str = ""
+    LLM_API_KEY: str = ""
+    LLM_MODEL_SMART: str = ""
+    LLM_MODEL_FAST: str = ""
+    LLM_MAX_CONCURRENCY: int = 2
 
     # External services
     GOOGLE_PLACES_API_KEY: str = ""

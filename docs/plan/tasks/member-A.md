@@ -23,7 +23,10 @@ whole app runnable offline from Day 1.
 **Not yours:** the mock LLM lives in C's `app/agents/llm.py` (P0-3).
 
 **Manual part (you, not the agent), Day 1. Start in the first hour; approvals take time:**
-1. Create the Anthropic API key, set a monthly spend limit, and share it securely (not in the repo).
+1. Create a **free** LLM API key: Google AI Studio (Gemini free tier, no credit card) as the main one and Groq
+   as a backup. Pick the current free models (one stronger "smart" model, one "fast" model) from the
+   provider's own docs, confirm they support JSON-schema output and tool calling through the OpenAI-compatible
+   endpoint, and share the key securely (not in the repo).
 2. Create the Meta developer app, add WhatsApp, get the **test number**, and add all 4 members' phones as recipients.
 3. Submit 2 templates in Egyptian Arabic (category Marketing): `intro` with 2 params (business name, a short
    personalized hook) and `followup` with 1 param. Write the texts with the team: short, polite, our company name, and
@@ -56,7 +59,8 @@ runs. The other 3 teammates start using it on Saturday, so the models and signat
    P4-2); if a real adapter module does not exist yet, raise NotImplementedError with a clear message that names the
    task that will add it. Leave a short comment at the top of the file explaining how to add a new adapter.
 4. docs/setup-whatsapp.md (first version: Meta app, test number, adding recipients, templates, webhook via
-   cloudflared) and docs/setup-accounts.md (Anthropic, Meta, Google Cloud; which env var each value goes into).
+   cloudflared) and docs/setup-accounts.md (the LLM provider, Meta, Google Cloud; which env var each value goes into,
+   including LLM_BASE_URL and the model names, plus the free-tier rate limits you found).
 5. Tests: every mock is deterministic (same input gives the same output), MockChannel send + simulate_inbound round
    trip, the registry returns mocks in mock mode and raises the clear NotImplementedError otherwise, and the Pydantic
    models reject invalid data (e.g. a phone that is not E.164).
@@ -120,8 +124,8 @@ Write a short "Knowledge" section in backend/app/services/README.md. Run poe che
 
 ~~~text
 Read CLAUDE.md, docs/ARCHITECTURE.md (§2–4) and docs/CONTRACTS.md (§2 LeadStatus, §4 transition, §6 LLM layer,
-§8 LeadScore/LeadScoreBatch, §9 insights stub, §10 job_score_leads) first. Use the claude-api skill for anything
-touching the Anthropic SDK — but you should only call app.agents.llm.llm_structured, never the SDK directly.
+§8 LeadScore/LeadScoreBatch, §9 insights stub, §10 job_score_leads) first. Call the model only through
+app.agents.llm.llm_structured; never call a provider SDK or API directly.
 
 Build the lead-scoring agent that decides which sourced businesses are real potential customers.
 
