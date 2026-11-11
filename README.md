@@ -1,359 +1,168 @@
-# B2B Growth Platform
-
-An AI-powered B2B lead generation and outreach platform that helps businesses discover, qualify, engage, and manage potential customers from one application.
-
-Instead of asking business owners to connect and orchestrate multiple tools themselves, the platform brings the workflow into a single workspace: define the business context and ideal customer profile (ICP), discover relevant leads, qualify and enrich their records, manage outreach across connected channels, and track results through a built-in CRM and analytics dashboard.
-
-> **Project status:** In development. This README describes the intended product and proposed architecture; individual integrations and features may not be implemented yet.
-
-## Table of Contents
-
-- [Problem](#problem)
-- [Solution](#solution)
-- [Core Workflow](#core-workflow)
-- [Key Features](#key-features)
-- [Architecture](#architecture)
-- [Technology Stack](#technology-stack)
-- [AI Agents and Background Workers](#ai-agents-and-background-workers)
-- [Data and Integrations](#data-and-integrations)
-- [Security and Responsible Outreach](#security-and-responsible-outreach)
-- [Development Roadmap](#development-roadmap)
-- [Local Development](#local-development)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
-
-## Problem
-
-B2B lead generation often requires repetitive manual work across disconnected tools. Teams must understand their target market, search multiple sources, identify suitable companies, find contact details, write personalized messages, manage replies, update spreadsheets or CRMs, and report on performance.
-
-This process is time-consuming, difficult to scale, and often depends on employees manually coordinating many separate services.
-
-## Solution
-
-The B2B Growth Platform aims to automate this workflow through a unified, multi-tenant SaaS application.
-
-A business owner configures the company profile, products or services, target market, ICP, outreach preferences, and available communication channels. The platform then runs a controlled workflow to discover potential customers, evaluate their fit, prepare outreach, track interactions, update the CRM, and report on outcomes.
-
-The product is designed for business users who should not need programming or AI expertise to operate the system.
-
-## Core Workflow
-
-1. **Configure business context** — Add company details, products, target markets, qualification rules, and supporting documents such as PDF or Markdown files.
-2. **Define the ICP** — Specify target industries, company size, locations, buyer roles, inclusion criteria, and exclusion criteria.
-3. **Discover leads** — Search through configured and permitted data sources, such as search providers and business directories.
-4. **Qualify and enrich** — Deduplicate results, evaluate ICP fit, record the evidence behind each score, and find or validate available business contact information.
-5. **Prepare outreach** — Generate context-aware message drafts for enabled channels.
-6. **Engage through connected channels** — Send and receive messages through supported integrations, subject to provider capabilities and applicable rules.
-7. **Manage the CRM pipeline** — Track lead status, conversations, activities, follow-ups, meetings, proposals, and outcomes.
-8. **Analyze performance** — Report on qualification rates, delivery and reply rates, channel performance, conversion, and reasons for lost opportunities.
-9. **Improve over time** — Use recorded outcomes to inform future qualification criteria and messaging, with changes kept reviewable and controlled.
-
-## Key Features
-
-### Business Context and ICP
-
-- Workspace-level company profile and product information.
-- Upload and process business documents.
-- Editable ICP configuration and qualification criteria.
-- Campaign-specific target markets and exclusion rules.
-
-### Lead Discovery and Qualification
-
-- Pluggable lead-source adapters.
-- Lead normalization and deduplication.
-- Qualification scores with explanations and source evidence.
-- Contact enrichment and verification where supported.
-- Clear handling of incomplete, low-confidence, or unavailable data.
-
-### Outreach Automation
-
-- Personalized message drafting using company context and lead information.
-- Configurable outreach policies and follow-up schedules.
-- Human approval options before sending.
-- Retry handling, rate limits, and delivery-state tracking.
-- Stop conditions for opt-outs, negative replies, and other suppression rules.
-
-### Built-in CRM
-
-- Searchable leads and contacts table.
-- Configurable pipeline stages.
-- Company and contact detail pages.
-- Conversation history and activity timeline.
-- Manual actions and follow-up management.
-- Duplicate prevention and auditable stage changes.
-
-### Channel Connections
-
-Users can connect and configure supported communication channels from the application. Email is a proposed first channel; other integrations, such as WhatsApp and Telegram, depend on the supported APIs, account types, permissions, and provider policies.
-
-The platform should verify a connection before enabling it for outreach and should clearly show connection health and supported capabilities. At least one usable outreach channel should be configured before automated outreach is enabled.
-
-### Analytics and Reporting
-
-- Lead discovery and qualification metrics.
-- Delivery, reply, and positive-reply rates.
-- Meeting and opportunity conversion.
-- Response-time and follow-up metrics.
-- Channel and campaign comparisons.
-- Lost-lead reasons and outcome tracking.
-
-## Architecture
-
-The proposed starting point is a **modular monolith with separate background workers**. This keeps the core product straightforward to develop while allowing long-running tasks to scale independently.
-
-```text
-React Web Application
-        |
-        v
-NestJS REST API
-        |
-        +-------------------- PostgreSQL
-        |                      Persistent business data
-        |
-        +-------------------- Redis + BullMQ
-                               Background job queues
-                                      |
-                +---------------------+---------------------+
-                |                     |                     |
-         Discovery Worker        AI Worker           Outreach Worker
-                |                     |                     |
-          Search adapters       LLM adapters       Messaging adapters
-
-                         Document Processing Worker
-                                  |
-                            Object Storage
-```
-
-### Main Components
-
-- **Web application:** Workspace setup, campaign management, lead review, CRM, channel settings, and analytics.
-- **API:** Authentication, authorization, workspace management, business logic, CRUD endpoints, and orchestration.
-- **PostgreSQL:** Persistent records for workspaces, ICPs, campaigns, leads, contacts, messages, activities, and agent runs.
-- **Redis and BullMQ:** Queuing, delayed jobs, retries, concurrency control, and background processing.
-- **AI layer:** Provider-independent interface for language models used for context extraction, qualification, research assistance, message drafting, and reply classification.
-- **Source adapters:** Consistent interfaces for configured lead-discovery providers.
-- **Messaging adapters:** Consistent interfaces for email and other supported channels.
-- **Object storage:** Uploaded documents and processed artifacts.
-- **Analytics:** Metrics derived from persisted events and CRM outcomes.
-
-External providers remain dependencies for services they control, such as search data, language models, and communication delivery. The platform owns its core workflow, business rules, CRM, and application data model.
-
-## Technology Stack
-
-The initial proposed stack is:
-
-| Area | Technology | Purpose |
-|---|---|---|
-| Frontend | React, TypeScript, Vite | Web application |
-| UI | Tailwind CSS, shadcn/ui | Styling and UI components |
-| Frontend data | TanStack Query | API state and caching |
-| Forms and validation | React Hook Form, Zod | Form handling and validation |
-| Backend | NestJS, TypeScript | REST API and application modules |
-| API documentation | OpenAPI / Swagger | API contracts and developer documentation |
-| Database | PostgreSQL | Persistent relational data |
-| ORM and migrations | Prisma | Data access and schema management |
-| Background jobs | Redis, BullMQ | Queues, retries, and scheduled work |
-| File storage | S3-compatible storage or MinIO | Documents and artifacts |
-| AI | Pluggable LLM provider adapter | Model access without provider lock-in |
-| Development environment | Docker Compose | Local infrastructure |
-| Monorepo | pnpm workspaces, Turborepo | Shared packages and coordinated builds |
-| CI | GitHub Actions (proposed) | Automated checks and tests |
-
-This is the proposed stack, not a claim that every component is already configured in the repository. Update this section as implementation decisions are confirmed.
-
-## AI Agents and Background Workers
-
-The platform separates model-assisted reasoning from deterministic application logic.
-
-| Component | Responsibility | LLM required? |
-|---|---|---|
-| Context processing | Turn company information and documents into structured context and ICP suggestions | Usually |
-| Discovery worker | Query sources, normalize results, and store candidates | Usually not |
-| Qualification agent | Assess fit against the configured ICP and explain the decision | Usually |
-| Enrichment worker | Gather or validate additional business details | Depends on the source and task |
-| Outreach agent | Draft personalized messages within configured policies | Usually |
-| Reply classifier | Classify replies, such as interested, not interested, asking for pricing, or requesting a meeting | Usually |
-| Follow-up scheduler | Schedule next actions and enforce stop conditions | No |
-| CRM and analytics services | Persist changes, record activities, and calculate metrics | No |
-
-A workflow orchestrator controls step order, state transitions, retries, and approval gates. The language model does not have unrestricted authority to execute arbitrary actions. Sending messages, updating records, and scheduling follow-ups must pass through validated application services.
-
-## Data and Integrations
-
-### Data Model
-
-The initial domain model is expected to include:
-
-- `users`
-- `workspaces`
-- `workspace_members`
-- `company_profiles`
-- `documents`
-- `icp_profiles`
-- `data_sources`
-- `campaigns`
-- `leads`
-- `contacts`
-- `lead_sources`
-- `conversations`
-- `messages`
-- `channel_connections`
-- `activities`
-- `agent_runs`
-- `suppression_entries`
-- `usage_records`
-
-The final schema may change as implementation progresses. Workspace ownership should be enforced consistently throughout the API and database access layer.
-
-### Integration Strategy
-
-Integrations are implemented behind internal interfaces so providers can be changed without rewriting the core workflow.
-
-- **Lead sources:** Add one source at a time, starting with a provider that permits the intended use.
-- **Email:** Implement one provider end-to-end, including sending, inbound replies, delivery events where available, and connection health.
-- **Messaging:** Add WhatsApp, Telegram, or other channels only after verifying the relevant API, account requirements, permissions, and supported operations.
-- **LLM:** Start with one provider behind an adapter and retain a provider-independent internal contract.
-
-A public website or a visible phone number does not automatically grant permission to scrape data or automate messages. Each integration must follow its provider's terms and applicable law.
-
-## Security and Responsible Outreach
-
-Security and reliable execution are core requirements, not optional add-ons.
-
-- Enforce workspace-level authorization for every tenant-owned record.
-- Store credentials and tokens securely; never commit secrets to source control.
-- Encrypt sensitive connection credentials and restrict access to them.
-- Validate external inputs and use typed schemas for model outputs and API payloads.
-- Record important actions and state transitions in an activity log.
-- Use idempotency controls and delivery-state tracking to reduce duplicate actions.
-- Respect provider rate limits, opt-outs, suppression lists, and applicable privacy and anti-spam requirements.
-- Provide controls to pause campaigns, disable channels, and require human approval.
-- Avoid treating model-generated contact details or qualification claims as verified facts without evidence.
-- Apply retention and deletion policies to personal and business contact data.
-
-## Development Roadmap
-
-The roadmap below is a proposed implementation sequence.
-
-### Phase 1 — Foundation
-
-- Set up the monorepo, frontend, API, database, Redis, and local Docker environment.
-- Implement authentication, workspaces, membership, and authorization.
-- Establish shared contracts, migrations, CI, and baseline tests.
-
-### Phase 2 — Business Context
-
-- Build company profile and ICP configuration screens.
-- Implement document upload and asynchronous processing.
-- Generate editable structured ICP suggestions from company context.
-
-### Phase 3 — Lead Discovery
-
-- Integrate the first permitted lead source.
-- Implement search jobs, normalization, deduplication, scoring, and evidence storage.
-- Build the leads table and lead detail view.
-
-### Phase 4 — CRM and Email Outreach
-
-- Implement pipeline stages, activities, conversations, and message history.
-- Integrate one email provider for outbound messages and inbound replies.
-- Add approval gates, follow-up rules, retry policies, and suppression handling.
-
-### Phase 5 — Additional Channels and Analytics
-
-- Add further channel adapters based on verified API capabilities.
-- Implement campaign metrics, reply classification, conversion reporting, and outcome tracking.
-- Add controlled feedback loops for improving qualification and messaging.
-
-### Phase 6 — Hardening and Release
-
-- Test tenant isolation, permissions, failure recovery, and duplicate prevention.
-- Add monitoring, structured logs, backups, and operational alerts.
-- Validate provider compliance, usage limits, security controls, and deployment procedures.
-
-## Local Development
-
-The commands below illustrate the expected workflow once the corresponding project files and scripts are implemented. They are not guaranteed to work until the repository setup is complete.
+# Nexus B2B — AI SDR for Egyptian B2B
+
+An AI sales-development agent that runs B2B lead generation for a business owner who has no technical background.
+
+The owner signs up, uploads a few files about the business, answers a short onboarding form, connects a WhatsApp Business number, and turns the agent on. From then on the agent runs the cycle every day by itself:
+
+1. Builds an **Ideal Customer Profile (ICP)** from the owner's files and answers.
+2. **Finds potential customers**, starting with Google Maps (Places API).
+3. **Scores and filters** them against the ICP, with a short reason for every decision.
+4. **Finds contact details**, mainly a mobile number that can be reached on WhatsApp.
+5. **Reaches out on WhatsApp** with a personalized first message (human approval by default).
+6. **Holds the conversation**, answering from the company's own knowledge.
+7. **Classifies every reply**: interested, not interested, wants an offer, wants management, later, wrong contact, or opt-out.
+8. **Escalates hot leads** to the owner on Telegram.
+9. **Logs everything** in a built-in CRM with reports, and learns from won and lost deals.
+
+The design follows the "B2B Growth Engine" reference architecture (intent data, enrichment, an LLM, a database, BI, outreach tools, and a CRM). The difference is that everything is one product and every external dependency sits behind a replaceable adapter.
+
+> **Status:** in development (Raed Misr, Agentic AI Engineering track). Deadline: Fri Dec 11, 2026.
+
+## Documentation
+
+| File | What it is |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | Rules every coding agent follows in this repo (loaded automatically by Claude Code) |
+| [docs/CONTRACTS.md](docs/CONTRACTS.md) | **Source of truth**: tables, enums, interfaces, jobs, API routes, env vars |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, the daily agent cycle, the lead state machine, guardrails |
+| [docs/plan/00-START-HERE.md](docs/plan/00-START-HERE.md) | Team plan: calendar, who does what, the task protocol, showcase list |
+| [docs/plan/tasks/](docs/plan/tasks/) | One file per member with ready-to-paste task prompts |
+| [docs/ai-dev-log.md](docs/ai-dev-log.md) | Log of every task built with a coding agent |
+
+## Stack
+
+| Area | Technology |
+|---|---|
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2.0 (async), Alembic, Pydantic v2 |
+| Background jobs | arq on Redis (cron in Africa/Cairo time) |
+| Database | PostgreSQL 16, Redis 7 (Docker Compose) |
+| Frontend | Next.js (App Router), TypeScript, Tailwind CSS, shadcn/ui, TanStack Query |
+| LLM | Anthropic API: Claude Opus 5.5 for reasoning, Claude Haiku 5.5 for bulk work |
+| Lead source | Google Places API (New) |
+| Outreach channel | WhatsApp Cloud API (official) |
+| Owner notifications | Telegram bot |
+| Tooling | uv + poethepoet (backend), npm (frontend), GitHub Actions CI |
+
+## Quickstart
+
+Works on Windows, macOS and Linux. No `make` needed.
 
 ### Prerequisites
 
-- Node.js LTS version compatible with the repository
-- pnpm
-- Docker and Docker Compose
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (running)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (it installs Python 3.12 for you)
+- [Node.js](https://nodejs.org/) 22 or newer
 - Git
 
-### Setup
+> **Windows, PowerShell:** if `npm` fails with "running scripts is disabled on this system", either run
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or call `npm.cmd` instead of `npm`.
+
+### 1. Infrastructure and config
 
 ```bash
-git clone <repository-url>
-cd b2b-growth-platform
-
-pnpm install
+git clone https://github.com/MoamenTalaat04/Nexus-B2B.git
+cd Nexus-B2B
 cp .env.example .env
-
-# Start local infrastructure once docker-compose.yml is configured
-docker compose up -d
-
-# Run database migrations once Prisma is configured
-pnpm db:migrate
-
-# Start development apps once workspace scripts are configured
-pnpm dev
+docker compose up -d db redis
 ```
 
-Configure credentials only in local environment files or a secrets manager. Never commit `.env` files containing real secrets.
+The defaults in `.env` use mock adapters and a mock LLM, so you don't need any API keys to start.
 
-## Project Structure
+### 2. Backend (terminal 1)
 
-The following is the proposed monorepo layout:
+```bash
+cd backend
+uv sync
+uv run poe migrate
+uv run poe api
+```
+
+Check it: <http://localhost:8000/api/v1/health> returns `{"status":"ok","db":"ok","redis":"ok"}`. The API docs are at <http://localhost:8000/docs>.
+
+### 3. Worker (terminal 2)
+
+```bash
+cd backend
+uv run poe worker
+```
+
+### 4. Frontend (terminal 3)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open <http://localhost:3000>. The page shows the backend status through the `/api` proxy.
+
+## Everyday commands
+
+| Command (run in `backend/`) | What it does |
+|---|---|
+| `uv run poe api` | FastAPI on :8000 with auto-reload |
+| `uv run poe worker` | arq worker (jobs + cron) |
+| `uv run poe migrate` | Apply migrations |
+| `uv run poe makemigration "add leads"` | Autogenerate a migration from the models |
+| `uv run poe check` | ruff + format check + mypy + pytest (**must pass before a PR**) |
+| `uv run poe format` | Auto-format and auto-fix lint |
+| `uv run poe eval <suite>` | Run an eval suite (calls the real API, costs money, not in CI) |
+| `uv run poe seed-demo` | Create the demo tenant and data |
+
+| Command (run in `frontend/`) | What it does |
+|---|---|
+| `npm run dev` | Next.js on :3000 |
+| `npm run check` | lint + typecheck + tests (**must pass before a PR**) |
+| `npm run build` | Production build |
+
+The backend tests need Postgres and Redis running. They create a separate `app_test` database automatically and roll back every test.
+
+## Project structure
 
 ```text
-b2b-growth-platform/
-├── apps/
-│   ├── web/                  # React web application
-│   ├── api/                  # NestJS REST API
-│   ├── worker-discovery/     # Lead discovery jobs
-│   ├── worker-ai/            # Qualification and AI tasks
-│   ├── worker-outreach/      # Outbound messages and replies
-│   └── worker-documents/     # PDF and Markdown processing
-├── packages/
-│   ├── database/             # Prisma schema and migrations
-│   ├── contracts/            # Shared DTOs and validation schemas
-│   ├── agent-core/           # Workflow orchestration
-│   ├── ai-provider/           # LLM provider adapters
-│   ├── lead-sources/         # Lead discovery adapters
-│   ├── messaging/            # Communication channel adapters
-│   ├── auth/                 # Shared authorization utilities
-│   └── config/               # Shared configuration
-├── infra/
-│   ├── docker/
-│   └── monitoring/
-├── docker-compose.yml
-├── pnpm-workspace.yaml
-└── turbo.json
+backend/
+  app/
+    main.py        FastAPI app; routers in app/api/*.py are auto-mounted under /api/v1
+    config.py      all settings (env vars)
+    db.py          async engine + get_session dependency
+    models/        SQLAlchemy models (base.py has Base + mixins)
+    schemas/       Pydantic request/response models
+    api/           routers (one per area)
+    services/      business logic
+    agents/        LLM-powered agents; prompts in agents/prompts/*.md
+    adapters/      external systems behind interfaces (LLM, search, WhatsApp, enrichment, notify)
+    workers/       arq worker; jobs in workers/jobs/*.py (any async job_* is auto-registered)
+    core/          errors, security, tenancy, tracing, lead state machine, crypto, phones
+  alembic/         migrations
+  evals/           eval suites and datasets
+  tests/
+frontend/
+  src/app/         Next.js routes ((auth) and (app) groups arrive in P0-4)
+  src/components/  UI components (shadcn/ui in components/ui)
+  src/hooks/       TanStack Query hooks
+  src/lib/         API client, types, utils
+docs/              contracts, architecture, team plan, dev log
+docker-compose.yml Postgres 16 + Redis 7
 ```
 
-The actual directory layout should be kept aligned with the code as the repository evolves.
+## Adding code: the two extension points
+
+- **API router:** create `backend/app/api/<area>.py` with `router = APIRouter(prefix="/<area>", tags=["<area>"])`. It is mounted under `/api/v1` automatically.
+- **Background job:** create `backend/app/workers/jobs/<area>.py` with `async def job_<name>(ctx, ...)`. It is registered automatically. For scheduled jobs, add `CRON_JOBS = [cron(job_<name>, hour=9, minute=0)]` (times are Cairo time). Enqueue from anywhere with `await enqueue("job_<name>", ...)` from `app.workers.queue`.
+- **Errors:** raise `AppError("snake_case_code", "Human message", status_code=409)` from `app.core.errors`. Every error response has the shape `{"error": {"code": ..., "message": ...}}`.
 
 ## Contributing
 
-1. Create a feature branch from the team's agreed base branch.
-2. Keep changes focused and use shared contracts for cross-module communication.
-3. Add or update tests for new behavior and failure cases.
-4. Run formatting, linting, type checks, and relevant tests before opening a pull request.
-5. Document environment variables and integration setup without including secrets.
-6. Use pull requests for review and keep module boundaries clear so teammates can work in parallel.
+1. Pick up your task from `docs/plan/tasks/member-<letter>.md` and follow the protocol in `docs/plan/00-START-HERE.md` (section 4).
+2. Branch name: `p<pipeline>-<task>-<slug>`, for example `p2-3-lead-scoring`.
+3. `uv run poe check` and `npm run check` must pass. CI runs both on every PR.
+4. Your buddy reviews and runs the PR locally. Then squash-merge.
+5. Never change `docs/CONTRACTS.md` inside a feature PR. Contract changes get their own small PR labeled `contract`.
 
-## Project Principles
+## Responsible outreach
 
-- **Business-owner friendly:** Complex orchestration should be hidden behind a simple interface.
-- **Modular by design:** Providers can be replaced without rewriting the core product.
-- **Reliable automation:** Every long-running workflow has explicit state, retries, and recovery behavior.
-- **Human control:** Users can review, pause, override, and audit automated actions.
-- **Evidence-based qualification:** Lead scores should be explainable and traceable to their sources.
-- **Privacy and isolation:** Each workspace's data and credentials must be protected.
-- **Incremental delivery:** Prove a complete end-to-end workflow before adding many providers or channels.
-
----
-
-**B2B Growth Platform** — Discover the right businesses, engage them responsibly, and manage the full lead lifecycle in one place.
+- WhatsApp uses the official Cloud API only. The first message to a lead is an approved template.
+- `demo_mode` is on by default: every outbound message is redirected to the team's whitelisted test phones.
+- Opt-out is final. A lead who opts out never receives another message.
+- No LinkedIn scraping. Lead data comes from Google Places and the businesses' own public websites (robots.txt respected).
+- Personal data is handled in line with Egypt's Personal Data Protection Law (151/2020).
