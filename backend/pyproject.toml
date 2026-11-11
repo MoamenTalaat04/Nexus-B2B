@@ -1,0 +1,86 @@
+[project]
+name = "ai-sdr-backend"
+version = "0.1.0"
+description = "AI SDR backend: FastAPI API, arq workers, LLM agents"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "arq>=0.26",
+    "httpx>=0.28",
+    "anthropic>=0.40",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.10",
+    "cryptography>=44",
+    "python-multipart>=0.0.18",
+    "phonenumbers>=8.13",
+    "pypdf>=5.1",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "beautifulsoup4>=4.12",
+    "polyfactory>=2.18",
+    "tzdata>=2024.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "poethepoet>=0.31",
+    "respx>=0.21",
+]
+
+[tool.uv]
+package = false
+
+# ---------------------------------------------------------------- tasks (uv run poe <task>)
+[tool.poe.tasks]
+api = { cmd = "uvicorn app.main:app --reload --reload-dir app --port 8000", help = "FastAPI on :8000 with reload" }
+worker = { cmd = "arq app.workers.main.WorkerSettings", help = "arq background worker" }
+migrate = { cmd = "alembic upgrade head", help = "Apply DB migrations" }
+makemigration = { cmd = "alembic revision --autogenerate -m", help = "Autogenerate a migration: poe makemigration \"msg\"" }
+lint = { cmd = "ruff check .", help = "Lint" }
+format = { shell = "ruff format . && ruff check --fix .", help = "Auto-format and auto-fix" }
+typecheck = { cmd = "mypy app", help = "Type-check" }
+test = { cmd = "pytest", help = "Run tests" }
+check = { sequence = [
+    { cmd = "ruff check ." },
+    { cmd = "ruff format --check ." },
+    { cmd = "mypy app" },
+    { cmd = "pytest" },
+], help = "Everything CI runs; must pass before a PR" }
+eval = { cmd = "python -m evals.run", help = "Run an eval suite: poe eval <suite> (costs money)" }
+seed-demo = { cmd = "python -m scripts.seed_demo", help = "Create the demo tenant and data" }
+
+# ---------------------------------------------------------------- tools
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC", "SIM", "RUF"]
+ignore = ["B008"]  # FastAPI's Depends() in defaults is idiomatic
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+filterwarnings = ["ignore::DeprecationWarning:passlib.*"]
