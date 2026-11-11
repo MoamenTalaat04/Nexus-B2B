@@ -1,13 +1,12 @@
 # Member B — Task Prompts
 
 **Your tasks:** P0-2 Data model & state machine · P1-2 Onboarding & settings · P2-2 Normalize, dedupe, sourcing job · P3-2 WhatsApp channel · P4-4 Feedback loop & demo seed ⭐
-**You are buddy for:** A in P0 · D in P1 · C in P2 · A in P3 · D in P4
 **Before every task:** read `00-START-HERE.md` §4. Paste only the part between the `~~~text` fences into Claude Code, **in plan mode**, from the repo root.
 
 ---
 
 ## P0-2 · Data model, migrations, state machine, tenancy — Wed Nov 11 → Fri Nov 13
-**Buddy:** C. **Start:** right away; the repo scaffold (P0-0) is already on `main`.
+**Start:** right away; the repo scaffold (P0-0) is already on `main`.
 **Files you own:** `backend/app/models/*` (except base.py, which already has `Base` and the mixins), `backend/app/models/enums.py`, `backend/alembic/versions/*` (first migration), `backend/app/core/lead_state.py`, `backend/app/core/tenancy.py`, `backend/app/core/crypto.py`, `frontend/src/lib/types.ts` (enums mirror only), tests.
 
 ~~~text
@@ -42,12 +41,11 @@ missing, stop and tell me instead of changing it.
 Also add backend/app/models/README.md with an ER summary (a mermaid erDiagram of the main tables). Run poe check.
 ~~~
 **Definition of done:** `uv run poe migrate` creates every table; transition tests cover the whole table; the enums are mirrored in TS.
-**Buddy (C) checks:** compare each table with CONTRACTS §3 column by column (yes, all of them; this prevents a month of bugs).
+**Self-check before you push:** compare each table with CONTRACTS §3 column by column (yes, all of them; this prevents a month of bugs).
 
 ---
 
 ## P1-2 · Onboarding wizard & business settings — Sat Nov 14 → Wed Nov 18
-**Buddy:** D.
 **Files you own:** `backend/app/api/settings.py`, `backend/app/schemas/settings.py`, `frontend/src/app/(app)/onboarding/*`, `frontend/src/app/(app)/settings/page.tsx` + `settings/business/*` + `settings/agent/*`, `frontend/src/hooks/useSettings.ts`, tests.
 
 ~~~text
@@ -89,12 +87,11 @@ Frontend:
 Run poe check and npm run check.
 ~~~
 **Definition of done:** a new user lands in the wizard, completes it in under 5 minutes, and every value persists.
-**Buddy (D) checks:** do the wizard as a "non-technical owner" and list every confusing word.
+**Self-check before you push:** do the wizard as a "non-technical owner" and list every confusing word.
 
 ---
 
 ## P2-2 · Normalization, dedupe, sourcing orchestration, daily cycle — Thu Nov 19 → Mon Nov 23
-**Buddy:** A.
 **Files you own:** `backend/app/core/phones.py`, `backend/app/services/leads_ingest.py`, `backend/app/workers/jobs/sourcing.py` (orchestration; C provides the query generation + search functions), `backend/app/workers/jobs/daily.py`, `backend/app/api/runs_trigger.py` (POST /runs/sourcing), tests.
 
 ~~~text
@@ -134,12 +131,11 @@ app/adapters/search/google_places.py. Code against the contract; use the mock se
 Run poe check.
 ~~~
 **Definition of done:** "Run agent now" → a run → new leads with no duplicates across two runs → scoring is enqueued.
-**Buddy (A) checks:** run sourcing twice with a real Places key and count duplicates in SQL.
+**Self-check before you push:** run sourcing twice with a real Places key and count duplicates in SQL.
 
 ---
 
 ## P3-2 · WhatsApp channel: adapter, webhook, sending, demo routing, settings UI — Tue Nov 24 → Mon Nov 30
-**Buddy:** C.
 **Critical path:** on **Day 1 of P3**, merge `services/messaging.py` with the contract signatures working against the mock channel, so C (outreach) and D (reply agent) are unblocked. Then build the real adapter.
 **Files you own:** `backend/app/adapters/channels/*`, `backend/app/services/messaging.py`, `backend/app/api/channels.py`, `backend/app/api/webhooks_whatsapp.py`, `backend/app/workers/jobs/messaging.py` (job_send_message + a stub job_handle_inbound that D replaces), `frontend/src/components/channels/*`, `docs/setup-whatsapp.md` (C wrote a first version in P0-3; you extend it), tests.
 
@@ -152,7 +148,7 @@ of guessing; the Graph API version comes from settings.WHATSAPP_GRAPH_VERSION.
 
 STEP 1 (merge first, same day): app/services/messaging.py with create_outbound, approve_message, reject_message,
 send_message, resolve_demo_target exactly as in the contract, working against the mock channel; job_send_message;
-a stub job_handle_inbound(ctx, message_id) that only logs (D replaces it in P3-4). Tests. Open the PR immediately.
+a stub job_handle_inbound(ctx, message_id) that only logs (D replaces it in P3-4). Tests. Push it immediately.
 
 STEP 2: the real adapter — adapters/channels/whatsapp_cloud.py (WhatsAppCloudAdapter: ChannelAdapter):
 - send_template(to, template_name, language, params): POST /{phone_number_id}/messages with type=template and a body
@@ -212,12 +208,11 @@ words, daily cap, quiet hours, window_closed, tenant routing by phone_number_id.
 Run poe check and npm run check.
 ~~~
 **Definition of done:** from the UI, a team member connects the test number, sends a test template to their phone, replies, and sees the reply stored against the right lead.
-**Buddy (C) checks:** do the whole connect → send → reply loop on your own phone; try an invalid token.
+**Self-check before you push:** do the whole connect → send → reply loop on your own phone; try an invalid token.
 
 ---
 
 ## P4-4 · Feedback loop + demo seed + end-to-end smoke test ⭐ SHOWCASE — Tue Dec 1 → Sun Dec 6
-**Buddy:** D.
 **Why it matters for the discussion:** "the system gets smarter over time". Show the insights generated from won/lost deals and a re-scoring that changes because of them.
 **Files you own:** `backend/app/agents/feedback.py`, `backend/app/agents/prompts/feedback.md`, `backend/app/services/insights.py` (replace A's stub), `backend/app/workers/jobs/feedback.py`, `backend/app/api/insights.py` (GET/POST, see below), `backend/scripts/seed_demo.py`, `backend/tests/e2e/*`, `docs/DEMO-SCRIPT.md`, `frontend/src/components/insights/*`.
 
@@ -265,13 +260,4 @@ Part 3 — end-to-end smoke test + demo script:
 Run poe check and npm run check.
 ~~~
 **Definition of done:** `poe seed-demo` gives a beautiful, believable demo account; the e2e test passes in CI; feedback insights appear and change the scoring prompt.
-**Buddy (D) checks:** log into the demo account cold and walk through DEMO-SCRIPT.md exactly as written.
-
----
-
-## Your buddy duties (summary)
-- **P0 → A** (accounts, adapters & mocks): compare every model and Protocol with CONTRACTS §7; call each mock from a Python shell.
-- **P1 → D** (ICP editor + evals): run the ICP eval; edit an ICP and confirm a new version is saved.
-- **P2 → C** (queries + Places): look at the generated queries; are they what a human salesperson would search?
-- **P3 → A** (enrichment): run it on 10 real qualified leads and report the hit rate.
-- **P4 → D** (escalation + Telegram): link your Telegram, trigger "wants management", and time the notification.
+**Self-check before you push:** log into the demo account cold and walk through DEMO-SCRIPT.md exactly as written.

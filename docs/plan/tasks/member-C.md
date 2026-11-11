@@ -1,14 +1,12 @@
 # Member C — Task Prompts
 
 **Your tasks:** P0-3 LLM layer & tracing ⭐ · P1-3 ICP builder agent ⭐ · P2-1 Query generator + Google Places · P3-3 Outreach engine & approvals ⭐ · P4-3 Reports & cost ⭐
-**You are buddy for:** B in P0 · A in P1 · D in P2 · B in P3 · A in P4
 **Change from the first version:** the Day-1 external setup and the adapter layer moved to A, so your P0 task is the LLM wrapper and tracing only.
 **Before every task:** read `00-START-HERE.md` §4. Paste only the part between the `~~~text` fences into Claude Code, **in plan mode**, from the repo root.
 
 ---
 
 ## P0-3 · LLM wrapper, pricing, tracing & runs API ⭐ SHOWCASE — Wed Nov 11 → Fri Nov 13
-**Buddy:** D.
 **Why it matters for the discussion:** this is the backbone of two showcases. *Tracing* makes every agent step visible,
 and *model routing + caching* is the cost story.
 **Files you own:** `backend/app/agents/llm.py`, `backend/app/agents/pricing.py`, `backend/app/core/tracing.py`, `backend/app/api/runs.py` (GET /runs, GET /runs/{id}), `backend/tests/fixtures/llm/`, `backend/app/agents/README.md`, tests.
@@ -60,12 +58,11 @@ llm_structured vs llm_tool_loop, tiers and effort guidance: FAST+low for bulk cl
 reasoning/writing, untrusted content wrapping, how to add an eval). Every teammate's agent will read this. Run poe check.
 ~~~
 **Definition of done:** a teammate can write `await llm_structured(run, name="x", tier=ModelTier.FAST, …)` and see the step with tokens and cost in `GET /runs/{id}`. The mock LLM makes the whole app runnable offline.
-**Buddy (D) checks:** make one real call with the key and confirm `cache_read_tokens > 0` on the second identical call.
+**Self-check before you push:** make one real call with the key and confirm `cache_read_tokens > 0` on the second identical call.
 
 ---
 
 ## P1-3 · Company Profile & ICP builder agent ⭐ SHOWCASE — Sat Nov 14 → Wed Nov 18
-**Buddy:** A.
 **Why it matters for the discussion:** "the owner explains their business once, like to a new employee, and the agent turns that into a precise targeting spec". Show the input files next to the generated ICP.
 **Files you own:** `backend/app/agents/icp_builder.py`, `backend/app/agents/prompts/icp_builder.md`, `backend/app/services/icp_service.py`, `backend/app/api/icp.py`, `backend/app/workers/jobs/icp.py`, tests. (D builds the UI and the eval suite.)
 
@@ -107,12 +104,12 @@ Run poe check. Then generate an ICP for real (ask the human first; it costs a fe
 files and paste the JSON in your summary for the team to review.
 ~~~
 **Definition of done:** "Generate ICP" produces a sensible profile + ICP in about 30–60 s, saved as v1. Editing creates v2.
-**Buddy (A) checks:** run it on two very different businesses; is anything invented that is not in the files?
+**Self-check before you push:** run it on two very different businesses; is anything invented that is not in the files?
 
 ---
 
 ## P2-1 · Query generator + Google Places adapter — Thu Nov 19 → Sat Nov 21
-**Buddy:** B (B orchestrates the sourcing job and calls your two functions).
+**Works with:** B (B orchestrates the sourcing job and calls your two functions).
 **Files you own:** `backend/app/agents/query_generator.py`, `backend/app/agents/prompts/query_generator.md`, `backend/app/adapters/search/google_places.py`, `backend/app/core/geo_eg_coords.py`, tests.
 
 ~~~text
@@ -147,12 +144,11 @@ Read CLAUDE.md, backend/app/agents/README.md and docs/CONTRACTS.md (§7 SearchSo
 Run poe check and paste the output of try_places.py (names only) into your summary.
 ~~~
 **Definition of done:** with a real key, `try_places.py` returns relevant Cairo kids-clothing shops; the generated queries look like what a salesperson would type.
-**Buddy (B) checks:** run the full sourcing job with your adapter and count relevant vs. irrelevant results by eye.
+**Self-check before you push:** run the full sourcing job with your adapter and count relevant vs. irrelevant results by eye.
 
 ---
 
 ## P3-3 · Outreach engine, personalization, autonomy & approval queue ⭐ SHOWCASE — Tue Nov 24 → Mon Nov 30
-**Buddy:** D.
 **Why it matters for the discussion:** *human-in-the-loop autonomy levels*. The owner chooses how much to trust the agent, and the approval queue shows the AI-written message plus its rationale before anything is sent.
 **Files you own:** `backend/app/services/autonomy.py`, `backend/app/services/outreach.py`, `backend/app/agents/message_personalizer.py`, `backend/app/agents/prompts/message_personalizer.md`, `backend/app/workers/jobs/outreach.py`, `backend/app/api/outreach.py`, `frontend/src/app/(app)/outreach/*`, `frontend/src/components/outreach/*`, tests.
 **Depends on:** B's `services/messaging.py` (merged on Day 1 of P3; until then code against the contract).
@@ -190,7 +186,7 @@ follow-ups (the 24h-window conversation is D's reply agent).
    skip. One agent_run(kind=OUTREACH_TICK) per tenant per tick only when there was work (don't spam empty runs).
    When a first-touch message becomes sent, the lead must move QUEUED→CONTACTED — B's send_message updates the
    message status; add the transition in a small hook function outreach.on_message_sent(session, message) and ask B
-   to call it (one line, agree in the PR).
+   to call it (one line, agree in the group chat).
 4. api/outreach.py: GET /outreach/queue (pending_approval messages with lead info, the personalization rationale and
    the template preview), POST /outreach/messages/{id}/approve {params?} (the edited params are validated like
    above) → messaging.approve_message, POST /outreach/messages/{id}/reject → messaging.reject_message + transition
@@ -208,12 +204,11 @@ follow-ups (the 24h-window conversation is D's reply agent).
 Run poe check and npm run check.
 ~~~
 **Definition of done:** with the autonomy mode `approve_all`, enriched leads show up in the queue with good Arabic previews. Approving sends them (to the demo phones). Follow-ups happen on schedule.
-**Buddy (D) checks:** approve 3 messages and receive them on your phone; switch to autopilot and confirm the cap and quiet hours are respected.
+**Self-check before you push:** approve 3 messages and receive them on your phone; switch to autopilot and confirm the cap and quiet hours are respected.
 
 ---
 
 ## P4-3 · Reports & cost analytics ⭐ SHOWCASE — Tue Dec 1 → Sat Dec 5
-**Buddy:** A.
 **Why it matters for the discussion:** this replaces Metabase. Above all it shows **cost per qualified lead** and **cost per positive reply** (the agentic-engineering economics), next to the business funnel.
 **Files you own:** `backend/app/api/reports.py`, `backend/app/services/reports.py`, `frontend/src/app/(app)/reports/*`, `frontend/src/components/reports/*`, tests.
 
@@ -250,13 +245,4 @@ Tests: seed a small known dataset in the test and assert every metric's exact va
 previous-period deltas), tenant isolation, and empty-range behaviour. Run poe check and npm run check.
 ~~~
 **Definition of done:** on the demo seed, the reports page tells a clear story, and every number can be explained with its definition.
-**Buddy (A) checks:** verify the reply rate and cost per qualified lead by hand with SQL.
-
----
-
-## Your buddy duties (summary)
-- **P0 → B** (data model): compare each table with CONTRACTS §3 column by column.
-- **P1 → A** (knowledge upload): upload a scanned PDF and a big DOCX and see what happens.
-- **P2 → D** (leads UI + activity): open a sourcing run in Agent Activity; can you follow what the agent did?
-- **P3 → B** (WhatsApp): do the full connect → send → reply loop on your phone; try an invalid token.
-- **P4 → A** (CRM): export with Arabic names and open it in Excel; drag cards; try a manual message outside the window.
+**Self-check before you push:** verify the reply rate and cost per qualified lead by hand with SQL.

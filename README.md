@@ -104,7 +104,7 @@ Open <http://localhost:3000>. The page shows the backend status through the `/ap
 | `uv run poe worker` | arq worker (jobs + cron) |
 | `uv run poe migrate` | Apply migrations |
 | `uv run poe makemigration "add leads"` | Autogenerate a migration from the models |
-| `uv run poe check` | ruff + format check + mypy + pytest (**must pass before a PR**) |
+| `uv run poe check` | ruff + format check + mypy + pytest (**must pass before pushing**) |
 | `uv run poe format` | Auto-format and auto-fix lint |
 | `uv run poe eval <suite>` | Run an eval suite (calls the real API, costs money, not in CI) |
 | `uv run poe seed-demo` | Create the demo tenant and data |
@@ -112,7 +112,7 @@ Open <http://localhost:3000>. The page shows the backend status through the `/ap
 | Command (run in `frontend/`) | What it does |
 |---|---|
 | `npm run dev` | Next.js on :3000 |
-| `npm run check` | lint + typecheck + tests (**must pass before a PR**) |
+| `npm run check` | lint + typecheck + tests (**must pass before pushing**) |
 | `npm run build` | Production build |
 
 The backend tests need Postgres and Redis running. They create a separate `app_test` database automatically and roll back every test.
@@ -154,10 +154,10 @@ docker-compose.yml Postgres 16 + Redis 7
 ## Contributing
 
 1. Pick up your task from `docs/plan/tasks/member-<letter>.md` and follow the protocol in `docs/plan/00-START-HERE.md` (section 4).
-2. Branch name: `p<pipeline>-<task>-<slug>`, for example `p2-3-lead-scoring`.
-3. `uv run poe check` and `npm run check` must pass. CI runs both on every PR.
-4. Your buddy reviews and runs the PR locally. Then squash-merge.
-5. Never change `docs/CONTRACTS.md` inside a feature PR. Contract changes get their own small PR labeled `contract`.
+2. Everyone pushes directly to `main`; there is no review gate. Start commit messages with the task id, e.g. `P2-3: lead scoring agent`.
+3. Before pushing: `uv run poe check` and `npm run check` must pass, then `git pull --rebase origin main`.
+4. CI runs both checks on every push to `main`. If it goes red after your push, fix it first.
+5. Contract changes (`docs/CONTRACTS.md`) are announced in the group chat and pushed as their own `contract:` commit.
 
 ## Responsible outreach
 

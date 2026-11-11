@@ -7,7 +7,7 @@ You are working in a team repo built by 4 people, each driving a coding agent in
 2. `docs/ARCHITECTURE.md` — the system design and the lead lifecycle.
 3. The task prompt you were given. It lists the files you **own**; do not edit files owned by other tasks.
 
-If the task seems to require changing a contract, **stop and tell the human**. Contract changes go through a separate PR.
+If the task seems to require changing a contract, **stop and tell the human**. Contract changes are announced to the team and pushed as their own `contract:` commit.
 
 ## Stack
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0 (async, asyncpg), Alembic, Pydantic v2, arq (Redis jobs), httpx, `uv` for packages, `poethepoet` for tasks.
@@ -22,11 +22,11 @@ cd backend && uv sync                  # deps
 cd backend && uv run poe migrate       # alembic upgrade head
 cd backend && uv run poe api           # FastAPI on :8000 (reload)
 cd backend && uv run poe worker        # arq worker
-cd backend && uv run poe check         # ruff + mypy + pytest  ← must pass before PR
+cd backend && uv run poe check         # ruff + mypy + pytest  ← must pass before pushing
 cd backend && uv run poe eval <suite>  # run an eval suite (costs money; not in CI)
 cd backend && uv run poe seed-demo     # demo tenant + data
 cd frontend && npm run dev             # Next.js on :3000
-cd frontend && npm run check           # lint + typecheck + tests ← must pass before PR
+cd frontend && npm run check           # lint + typecheck + tests ← must pass before pushing
 ```
 
 ## Backend layout
@@ -83,4 +83,6 @@ Outreach and replies are written in **Egyptian Arabic** (unless the tenant choos
 - You end your session by summarizing: what you changed, how to test it manually, and what you did **not** finish.
 
 ## Git
-Branch `p<pipeline>-<task-number>-<slug>`, small commits, squash-merge after buddy review. Never force-push `main`.
+Everyone pushes directly to `main`; there is no review gate. Commit messages start with the task id (`P2-3: ...`).
+Before pushing: run the checks, then `git pull --rebase origin main`. Push small pieces often. Never force-push `main`.
+If CI on `main` is red after your push, fixing it comes first.

@@ -1,7 +1,6 @@
 # Member A — Task Prompts
 
 **Your tasks:** P0-1 Accounts, adapters & mocks · P1-1 Knowledge upload · P2-3 Lead scoring agent ⭐ · P3-1 Website enrichment · P4-1 CRM & lead detail
-**You are buddy for:** D in P0 · C in P1 · B in P2 · D in P3 · C in P4
 **Change from the first version:** P0-0 (repo scaffold) is already done by Claude, so your P0 task is the external accounts and the adapter layer, which C used to own.
 **Before every task:** read `00-START-HERE.md` §4 (the protocol). Paste only the part between the `~~~text` fences into Claude Code, **in plan mode**, from the repo root.
 
@@ -11,13 +10,12 @@
 Already in the repo: Docker Compose (Postgres 16 + Redis 7), the FastAPI app with router auto-discovery, settings,
 the async DB session, `Base` + mixins, Alembic (baseline migration), the arq worker with job auto-discovery and
 `enqueue()`, the test fixtures (rolled-back DB session + HTTP client), the Next.js app with shadcn/ui, TanStack Query,
-Vitest and the `/api` rewrite, GitHub Actions CI, the PR template, and the README quickstart.
+Vitest and the `/api` rewrite, GitHub Actions CI, and the README quickstart.
 `uv run poe check` and `npm run check` both pass. **Everyone:** do a fresh clone on Day 1 and follow the README.
 
 ---
 
 ## P0-1 · External accounts, adapter interfaces, mocks & registry — Wed Nov 11 → Fri Nov 13
-**Buddy:** B.
 **Why it matters for the discussion:** *replaceable adapters* answer the question "how is this different from gluing
 SaaS tools together?". Google, WhatsApp, enrichment and notifications each sit behind an interface, and mocks make the
 whole app runnable offline from Day 1.
@@ -67,12 +65,12 @@ Finally write backend/app/adapters/README.md: "How adapters work in this repo" (
 real, how to add a new provider). Run poe check.
 ~~~
 **Definition of done:** a teammate can write `registry.get_search_source().search(...)` in mock mode and get believable Egyptian businesses back; the templates are submitted to Meta and the keys are shared.
-**Buddy (B) checks:** compare every model and Protocol with CONTRACTS §7 field by field; call each mock from a Python shell.
+**Self-check before you push:** compare every model and Protocol with CONTRACTS §7 field by field; call each mock from a Python shell.
 
 ---
 
 ## P1-1 · Knowledge upload & extraction — Sat Nov 14 → Mon Nov 16
-**Buddy:** C (C's ICP agent consumes your output, so agree on `get_knowledge_text` early).
+**Works with:** C (C's ICP agent consumes your output, so agree on `get_knowledge_text` early).
 **Files you own:** `backend/app/api/knowledge.py`, `backend/app/services/knowledge.py`, `backend/app/schemas/knowledge.py`, `backend/tests/test_knowledge*.py`, `frontend/src/components/knowledge/*`, `frontend/src/hooks/useKnowledge.ts`.
 
 ~~~text
@@ -111,12 +109,12 @@ Frontend (inside the existing app shell; D owns the layout and C/D own the ICP p
 Write a short "Knowledge" section in backend/app/services/README.md. Run poe check and npm run check.
 ~~~
 **Definition of done:** uploading a real company PDF in Arabic shows a readable preview; `get_knowledge_text` returns it.
-**Buddy (C) checks:** call `get_knowledge_text` from a Python shell on your data; try a scanned PDF.
+**Self-check before you push:** call `get_knowledge_text` from a Python shell on your data; try a scanned PDF.
 
 ---
 
 ## P2-3 · Lead scoring / qualification agent ⭐ SHOWCASE — Thu Nov 19 → Mon Nov 23
-**Buddy:** D (D built the eval harness in P1-4; use it).
+**Works with:** D (D built the eval harness in P1-4; use it).
 **Why it matters for the discussion:** this is the "filter like a smart salesperson" step. Show precision/recall numbers from your eval, plus cost per 100 leads (fast model vs. smart model).
 **Files you own:** `backend/app/agents/lead_scorer.py`, `backend/app/agents/prompts/lead_scorer.md`, `backend/app/workers/jobs/scoring.py`, `backend/app/services/insights.py` (stub only), `backend/evals/suites/lead_scoring.py`, `backend/evals/datasets/lead_scoring.jsonl`, tests.
 
@@ -172,12 +170,12 @@ Run poe check. Then run `uv run poe eval lead_scoring` once with a real API key 
 money) and paste the metrics into your summary and into docs/ai-dev-log.md.
 ~~~
 **Definition of done:** after a sourcing run, leads become `qualified`/`disqualified` with readable reasons. The eval reports precision ≥ 0.85 on qualified (or you document why not and what you tried).
-**Buddy (D) checks:** run the eval yourself; read 10 reasons in the UI and judge whether they make sense.
+**Self-check before you push:** run the eval yourself; read 10 reasons in the UI and judge whether they make sense.
 
 ---
 
 ## P3-1 · Website enrichment (contact discovery) — Tue Nov 24 → Thu Nov 26
-**Buddy:** B (you use B's `app/core/phones.py` from P2-2).
+**Works with:** B (you use B's `app/core/phones.py` from P2-2).
 **Files you own:** `backend/app/adapters/enrichment/*`, `backend/app/workers/jobs/enrichment.py`, `backend/app/services/enrichment.py`, tests.
 
 ~~~text
@@ -217,12 +215,11 @@ Egyptian MOBILE number (+20 10/11/12/15…).
 Run poe check and summarise the hit-rate on the mock data.
 ~~~
 **Definition of done:** qualified leads end up `enriched` with a primary mobile, or `no_contact`; the contacts are visible via `GET /leads/{id}`.
-**Buddy (B) checks:** run it on 10 real qualified leads from your P2 data (use mock off and a real Places key) and report the hit rate.
+**Self-check before you push:** run it on 10 real qualified leads from your P2 data (use mock off and a real Places key) and report the hit rate.
 
 ---
 
 ## P4-1 · CRM: pipeline board, lead detail, actions, export — Tue Dec 1 → Fri Dec 4
-**Buddy:** C.
 **Files you own:** `backend/app/api/leads_actions.py` (PATCH, notes, outcome, contacts, manual message, export; D owns the list endpoint in `api/leads.py`, and you add the detail endpoint `GET /leads/{id}` there in coordination with D), `backend/app/services/crm.py`, `frontend/src/app/(app)/pipeline/*`, `frontend/src/app/(app)/leads/[id]/*`, `frontend/src/components/crm/*`, tests.
 
 ~~~text
@@ -257,20 +254,11 @@ Frontend:
    that is disabled with an explanation when the 24h window is closed), Details (contacts with add-contact form,
    score reasons, ICP version), History (status timeline), Notes. Buttons: Pause/Resume agent, Mark won/lost,
    Change status.
-8. An "Export to Excel" button on /leads (D's list page — coordinate: add a prop/slot or a small PR to D's file
+8. An "Export to Excel" button on /leads (D's list page — coordinate: add a prop/slot or a small commit to D's file
    after D merges P2-4).
 
 Tests: backend tests for every endpoint including tenant isolation and the window_closed rule; component tests for
 the kanban drag → PATCH and the closed-window composer. Run poe check and npm run check.
 ~~~
 **Definition of done:** an owner can follow a lead from first message to "won" entirely inside the app and export the list to Excel.
-**Buddy (C) checks:** export with Arabic names and open it in Excel; drag cards across columns; try a manual message outside the window.
-
----
-
-## Your buddy duties (summary)
-- **P0 → D** (auth & shell): log in/out; confirm cookies work through the Next.js rewrite.
-- **P1 → C** (ICP agent): run ICP generation on your own uploaded files; read the JSON critically.
-- **P2 → B** (normalize/dedupe/sourcing job): run "Run agent now" twice and confirm there are no duplicates.
-- **P3 → D** (reply agent): play the lead from your phone; try to break it (ask for 70% off, insult it, say "stop").
-- **P4 → C** (reports): check two numbers by hand against the DB.
+**Self-check before you push:** export with Arabic names and open it in Excel; drag cards across columns; try a manual message outside the window.

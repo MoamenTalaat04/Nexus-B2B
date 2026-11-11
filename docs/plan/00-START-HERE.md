@@ -30,18 +30,6 @@ It is based on the "B2B Growth Engine" architecture (Bombora, Apollo, Apify, Cla
 over the external accounts, the adapter interfaces and the mocks from C, and C's P0 task is now only the LLM
 wrapper and tracing. P1 to P4 are unchanged.
 
-### Buddy matrix (who reviews and can take over whose task)
-
-| Pipeline | A's buddy | B's buddy | C's buddy | D's buddy |
-|---|---|---|---|---|
-| P0 | B | C | D | A |
-| P1 | C | D | A | B |
-| P2 | D | A | B | C |
-| P3 | B | C | D | A |
-| P4 | C | D | A | B |
-
-Buddies rotate every pipeline, so by the end everyone has reviewed (and run) code from every part of the system.
-
 ### Calendar
 
 | Pipeline | Dates | Goal: at the end of this pipeline, all four of you can demo… |
@@ -54,7 +42,7 @@ Buddies rotate every pipeline, so by the end everyone has reviewed (and run) cod
 | **Freeze** | Mon Dec 7 → Thu Dec 10 | Bug bash, demo data, slides, two full rehearsals. **No new features.** |
 | **Deadline** | Fri Dec 11 | 🎯 |
 
-Each pipeline ends with a **30-minute "slice demo" call**. Everyone pulls `main`, runs the whole flow on their own machine, and fixes whatever breaks before the next pipeline starts. Nobody should be the only person able to run a given part.
+Each pipeline ends with a **30-minute "slice demo" call**. This is the one moment where the team looks at each other's work together. Everyone pulls `main`, runs the whole flow on their own machine, and fixes whatever breaks before the next pipeline starts. Nobody should be the only person able to run a given part.
 
 ---
 
@@ -62,7 +50,9 @@ Each pipeline ends with a **30-minute "slice demo" call**. Everyone pulls `main`
 
 1. **Vertical slices.** Nobody is "the frontend person" or "the AI person". Every member touches backend, frontend, and LLM work.
 2. **Contracts first.** `docs/CONTRACTS.md` defines the DB tables, enums, adapter interfaces, the LLM wrapper, and API routes **before** any code exists. Four agents working in parallel stay compatible because they all build against the same contract.
-3. **Owner + buddy.** The buddy reviews every PR of the owner **and runs it locally**. If the owner gets sick, the buddy continues using the same prompt plus the owner's branch.
+3. **Everyone pushes their own work; no review gate.** Each person is responsible for their own task: the tests, the
+   self-check, and a green CI after pushing. If someone gets stuck or sick, anyone can continue the task from the same
+   prompt plus whatever the owner already pushed, so **push at least once a day**.
 4. **Mocks from Day 1.** `USE_MOCK_ADAPTERS=true` gives fake Google, fake WhatsApp, and fake LLM, so no one waits on someone else's task or on Meta/Google approvals.
 5. **Each task lists the files it owns.** Agents are told not to edit files owned by another in-flight task. This avoids merge hell.
 6. **Small tasks.** Nothing should take more than about 2–3 days. If it does, split it and tell the team.
@@ -73,17 +63,19 @@ Each pipeline ends with a **30-minute "slice demo" call**. Everyone pulls `main`
 
 Follow this exactly. It is also part of our "agentic engineering" story for the discussion.
 
-1. `git checkout main && git pull`, then `git checkout -b p2-3-lead-scoring` (branch name = task id + slug).
+1. `git checkout main && git pull`.
 2. Open Claude Code in the **repo root**. `CLAUDE.md` loads automatically.
 3. **Use plan mode.** Paste the task's prompt block (the part between `~~~text` fences). Read the plan the agent proposes. Correct it if it misreads the contract, then approve.
 4. Let it implement. It must write tests and run `uv run poe check` (backend) and `npm run check` (frontend).
-5. Before opening the PR, ask the agent: *"Review your diff against CLAUDE.md and docs/CONTRACTS.md and list any violations"* (or run `/code-review`). Fix what it finds.
-6. Open a PR with the template: what changed, how to test, screenshots, and the dev-log entry.
-7. The **buddy reviews and runs it within 12 hours**. Merge with squash.
-8. Append your entry to `docs/ai-dev-log.md` (template inside). **Don't skip this.** We will use it in the presentation.
+5. Ask the agent: *"Review your diff against CLAUDE.md and docs/CONTRACTS.md and list any violations"* (or run `/code-review`). Fix what it finds. Then do the task's **self-check** yourself.
+6. Append your entry to `docs/ai-dev-log.md` (template inside). **Don't skip this.** We will use it in the presentation.
+7. Push to `main`: commit with a message that starts with the task id (`P2-3: lead scoring agent`), then
+   `git pull --rebase origin main`, re-run the checks if other people's changes came in, and `git push origin main`.
+   Push small pieces as you go, at least once a day.
+8. Watch the CI run on GitHub after you push. **If `main` goes red, whoever pushed last fixes it before anything else.**
 
 **Rules for agents (enforced through CLAUDE.md):**
-- Never change `docs/CONTRACTS.md` silently. A contract change gets its own small PR labeled `contract`, approved by at least 2 members, and announced in the group.
+- Never change `docs/CONTRACTS.md` silently. Announce a contract change in the group chat first, then push it as its own small commit whose message starts with `contract:`.
 - Never commit secrets. Never call real external APIs in unit tests.
 - Never send WhatsApp messages to real businesses during development. `DEMO_MODE` redirects every outbound message to the team's whitelisted phones.
 
@@ -103,7 +95,7 @@ Tasks marked ⭐ in the task files produce something we will **show and explain*
 | 6 | **Cost engineering** | P0-3, P4-3 | Model routing (Opus 5.5 for reasoning, Haiku 5.5 for bulk), prompt caching, and **cost per qualified lead** on the reports page. |
 | 7 | **Human-in-the-loop autonomy levels** | P3-3 | Approve-all → approve-first-touch → autopilot. Trust is earned gradually. |
 | 8 | **Closed feedback loop** | P4-4 | Won/lost deals → learned insights → better scoring on the next run. |
-| 9 | **How we built it with agents** | the whole process | Contracts-first, CLAUDE.md, prompt-shaped tasks, AI + human review, and the dev-log metrics (tasks, hours, bugs caught by review, what the agent got wrong). |
+| 9 | **How we built it with agents** | the whole process | Contracts-first, CLAUDE.md, prompt-shaped tasks, AI self-review, and the dev-log metrics (tasks, hours, bugs caught by AI review, what the agent got wrong). |
 
 **Optional stretch (only if you are ahead of schedule in P4):** an MCP server exposing the CRM (`list_hot_leads`, `get_lead`, `pipeline_summary`) so an owner can ask Claude "who replied today?". It is a strong showcase, but it is **not required**.
 
@@ -146,7 +138,7 @@ Nexus-B2B/
     ai-dev-log.md           ← the log we fill after every task
     plan/
       00-START-HERE.md      ← this file (everyone)
-      tasks/member-A.md     ← A's task prompts + buddy duties
+      tasks/member-A.md     ← A's task prompts
       tasks/member-B.md
       tasks/member-C.md
       tasks/member-D.md

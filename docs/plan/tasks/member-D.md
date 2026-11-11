@@ -1,13 +1,11 @@
 # Member D — Task Prompts
 
 **Your tasks:** P0-4 Auth & frontend shell · P1-4 ICP editor + eval harness ⭐ · P2-4 Leads UI + Agent Activity ⭐ · P3-4 Reply agent ⭐⭐ · P4-2 Escalation, Telegram, dashboard
-**You are buddy for:** C in P0 · B in P1 · A in P2 · C in P3 · B in P4
 **Before every task:** read `00-START-HERE.md` §4. Paste only the part between the `~~~text` fences into Claude Code, **in plan mode**, from the repo root.
 
 ---
 
 ## P0-4 · Authentication + frontend app shell — Wed Nov 11 → Fri Nov 13
-**Buddy:** A.
 **Files you own:** `backend/app/api/auth.py`, `backend/app/core/security.py`, `backend/app/schemas/auth.py`, `frontend/src/app/(auth)/*`, `frontend/src/app/(app)/layout.tsx`, `frontend/src/components/layout/*`, `frontend/src/lib/api.ts`, `frontend/src/hooks/useAuth.ts`, `frontend/src/middleware.ts`, tests.
 
 ~~~text
@@ -42,12 +40,11 @@ Frontend:
 Run poe check and npm run check. Report the exact register → dashboard flow you tested.
 ~~~
 **Definition of done:** register → logged in → shell with all nav items; logout works; protected routes redirect.
-**Buddy (A) checks:** test in two browsers with two accounts and confirm no data crosses over.
+**Self-check before you push:** test in two browsers with two accounts and confirm no data crosses over.
 
 ---
 
 ## P1-4 · ICP review/editor UI + the eval harness + ICP eval ⭐ SHOWCASE — Sat Nov 14 → Wed Nov 18
-**Buddy:** B.
 **Why it matters for the discussion:** **evals are the core of agentic engineering.** This harness is reused by scoring (P2-3) and the reply agent (P3-4). In the presentation we show numbers, not vibes.
 **Files you own:** `frontend/src/app/(app)/icp/*`, `frontend/src/components/icp/*`, `backend/evals/*` (harness, README, the icp suite and dataset), tests.
 
@@ -92,12 +89,12 @@ Run poe check and npm run check. Run the icp suite once for real (ask the human 
 numbers in docs/ai-dev-log.md.
 ~~~
 **Definition of done:** an owner can read and correct the ICP without seeing JSON. `poe eval icp` prints a scorecard and saves results.
-**Buddy (B) checks:** run the eval yourself; change one word in the ICP prompt and use `--compare`.
+**Self-check before you push:** run the eval yourself; change one word in the ICP prompt and use `--compare`.
 
 ---
 
 ## P2-4 · Leads list UI + Agent Activity (traces) ⭐ SHOWCASE — Thu Nov 19 → Mon Nov 23
-**Buddy:** C (C built the runs API and tracing).
+**Works with:** C (C built the runs API and tracing).
 **Why it matters for the discussion:** **observability**. Open any run and see every step the agent took: the queries, the API calls, the LLM calls with tokens and cost, and the decisions. This is how we debug and trust an agent.
 **Files you own:** `backend/app/api/leads.py` (GET /leads list; A adds GET /leads/{id} later), `backend/app/schemas/leads.py`, `frontend/src/app/(app)/leads/page.tsx`, `frontend/src/components/leads/*`, `frontend/src/app/(app)/activity/*`, `frontend/src/components/activity/*`, tests.
 
@@ -127,15 +124,14 @@ Frontend:
    live in the final presentation — make it clear and polished.
 4. Component tests: filter → query params, the run detail rendering of each step type, the error step styling.
 
-Run poe check and npm run check. Take screenshots of /leads and /activity/[id] with mock data for the PR.
+Run poe check and npm run check. Take screenshots of /leads and /activity/[id] with mock data for the dev log.
 ~~~
 **Definition of done:** after "Run agent now", the run appears live in Agent Activity, and the leads appear with scores and reasons.
-**Buddy (C) checks:** open a scoring run and make sure every LLM call shows tokens/cost and matches the totals.
+**Self-check before you push:** open a scoring run and make sure every LLM call shows tokens/cost and matches the totals.
 
 ---
 
 ## P3-4 · Reply Agent: classification + tool-using conversation + guardrails ⭐⭐ MAIN SHOWCASE — Tue Nov 24 → Mon Nov 30
-**Buddy:** A.
 **Why it matters for the discussion:** this is the **true agent** in our system. Claude reads the lead's reply, decides what to do, and acts through tools, inside guardrails that are **proven by evals** (including prompt-injection attempts). Plan to spend most of the presentation's agent explanation here.
 **Files you own:** `backend/app/agents/reply_classifier.py`, `backend/app/agents/reply_agent.py`, `backend/app/agents/prompts/reply_classifier.md`, `backend/app/agents/prompts/reply_agent.md`, `backend/app/agents/reply_tools.py`, `backend/app/workers/jobs/inbound.py` (replaces B's stub job_handle_inbound), `backend/app/services/notifications.py` (minimal notify_owner; you extend it in P4-2), `backend/evals/suites/reply_*.py`, `backend/evals/datasets/reply_*.jsonl`, tests.
 **Depends on:** B's `services/messaging.py` (Day 1 of P3) and C's `services/autonomy.py`; code against the contract until they merge.
@@ -210,12 +206,11 @@ If a case fails, improve the prompt, bump PROMPT_VERSION and use --compare to sh
 goes into the presentation.
 ~~~
 **Definition of done:** reply from your phone (in Egyptian Arabic) "I want to know the prices and the minimum order" and get a correct, short Arabic answer from the knowledge; "I want to talk to the factory owner" escalates; the evals meet their targets (or the misses are documented).
-**Buddy (A) checks:** play the lead on your phone for 10 minutes and try hard to break it; write down everything odd.
+**Self-check before you push:** play the lead on your phone for 10 minutes and try hard to break it; write down everything odd.
 
 ---
 
 ## P4-2 · Escalation, Telegram owner notifications, notifications UI, dashboard — Tue Dec 1 → Fri Dec 4
-**Buddy:** B.
 **Files you own:** `backend/app/services/notifications.py` (extend), `backend/app/adapters/notify/telegram.py`, `backend/app/api/notifications.py`, `backend/app/api/telegram.py` (link + webhook), `backend/app/api/dashboard.py`, `frontend/src/app/(app)/page.tsx` (dashboard), `frontend/src/components/notifications/*`, `frontend/src/components/dashboard/*`, tests.
 
 ~~~text
@@ -253,13 +248,4 @@ Owners must hear about hot leads within a minute, on their phone, without openin
 Run poe check and npm run check.
 ~~~
 **Definition of done:** a lead says "I want to talk to the manager" (in Egyptian Arabic) on WhatsApp → the owner's Telegram buzzes within seconds with a link to the lead; the dashboard shows it under "Needs your attention".
-**Buddy (B) checks:** link your Telegram and trigger each notification kind once.
-
----
-
-## Your buddy duties (summary)
-- **P0 → C** (LLM layer & tracing): make one real call; confirm cache reads on the repeat; open the run in the API.
-- **P1 → B** (onboarding): do the wizard as a non-technical owner and list every confusing word.
-- **P2 → A** (lead scoring): run the scoring eval yourself; read 10 reasons in the UI and judge them.
-- **P3 → C** (outreach): approve 3 messages and receive them on your phone; test autopilot with the cap and quiet hours.
-- **P4 → B** (feedback + demo seed): log into the demo account cold and follow DEMO-SCRIPT.md exactly.
+**Self-check before you push:** link your Telegram and trigger each notification kind once.

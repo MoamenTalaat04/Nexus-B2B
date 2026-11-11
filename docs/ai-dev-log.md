@@ -4,7 +4,7 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
 
 ## Running totals (update at the end of each pipeline)
 
-| Pipeline | Tasks | Agent sessions | Est. hours saved | Bugs caught by AI review | Bugs caught by buddy | Contract changes |
+| Pipeline | Tasks | Agent sessions | Est. hours saved | Bugs caught by AI review | Bugs caught at slice demo | Contract changes |
 |---|---|---|---|---|---|---|
 | P0 | | | | | | |
 | P1 | | | | | | |

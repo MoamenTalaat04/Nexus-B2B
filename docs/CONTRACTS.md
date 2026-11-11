@@ -1,6 +1,6 @@
 # CONTRACTS — source of truth
 
-> Every task builds against this file. To change it: a separate PR labeled `contract`, approved by 2+ members, announced in the group.
+> Every task builds against this file. To change it: announce the change in the group chat first, then push it as its own commit whose message starts with `contract:`.
 > Names here (tables, columns, enums, functions, routes) must be used **exactly**.
 
 ## 1. Conventions
