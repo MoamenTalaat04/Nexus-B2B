@@ -166,17 +166,19 @@ Run poe check and paste the output of try_places.py (names only) into your summa
 ---
 
 ## P3-3 · Outreach engine, personalization, autonomy & approval queue ⭐ SHOWCASE — Tue Nov 24 → Mon Nov 30
-**Why it matters for the discussion:** *human-in-the-loop autonomy levels*. The owner chooses how much to trust the agent, and the approval queue shows the AI-written message plus its rationale before anything is sent.
+**Why it matters for the discussion:** *human-in-the-loop autonomy levels*. The owner chooses how much to trust the agent, and the approval queue shows the AI-written message plus its rationale before anything is sent. *Assisted mode* shows we designed around WhatsApp's no-cold-messaging rules instead of ignoring them.
 **Files you own:** `backend/app/services/autonomy.py`, `backend/app/services/outreach.py`, `backend/app/agents/message_personalizer.py`, `backend/app/agents/prompts/message_personalizer.md`, `backend/app/workers/jobs/outreach.py`, `backend/app/api/outreach.py`, `frontend/src/app/(app)/outreach/*`, `frontend/src/components/outreach/*`, tests.
 **Depends on:** B's `services/messaging.py` (merged on Day 1 of P3; until then code against the contract).
 
 ~~~text
 Read CLAUDE.md, backend/app/agents/README.md, docs/ARCHITECTURE.md §3–4 and docs/CONTRACTS.md (§3
 business_settings.sequence_steps, leads.sequence_step/next_action_at/agent_paused, message_templates; §8
-PersonalizedOpening; §9 messaging + autonomy; §10 job_outreach_tick; §11 /outreach routes) first.
+PersonalizedOpening + AssistedMessage; §9 messaging + autonomy; §10 job_outreach_tick; §11 /outreach routes; §12
+lead-initiated chats) first.
 
-Build the engine that decides who gets messaged, when, and with what — WhatsApp templates only for first touch and
-follow-ups (the 24h-window conversation is D's reply agent).
+Build the engine that decides who gets messaged, when, and with what. First touches and follow-ups are either
+WhatsApp templates sent by the API (first_touch_mode=api_template) or messages the owner sends personally
+(first_touch_mode=assisted, item 6). The 24h-window conversation is D's reply agent.
 
 1. services/autonomy.py — needs_approval(settings, purpose) exactly as in the contract.
 2. agents/message_personalizer.py, PROMPT_VERSION "message_personalizer@1":
@@ -214,13 +216,33 @@ follow-ups (the 24h-window conversation is D's reply agent).
    character counters, Approve / Reject, select-all + bulk approve, an empty state explaining the autonomy modes
    with a link to settings, and a counter badge in the sidebar (expose a hook usePendingApprovals; D owns the
    sidebar, so ask D to render it).
-6. Tests: needs_approval for all modes; the tick selection (quiet hours, working days, cap, paused, opted_out,
+6. ASSISTED MODE (settings.first_touch_mode == "assisted", the default for real tenants):
+   - In the tick, first touches and follow-ups for these tenants create kind=ASSISTED messages instead of templates
+     (same selection, daily cap, quiet hours, working days and sequence logic; ENRICHED→QUEUED as before).
+   - agents/message_personalizer.py gets a second function, PROMPT_VERSION shared:
+     async def write_assisted(run, *, profile, icp, lead, step_purpose, assistant_link: str | None) -> AssistedMessage
+     tier=FAST effort="low". A short, warm, personal Egyptian Arabic message as if from the owner (2–4 sentences,
+     ≤ 500 chars): who we are, one specific true detail about the lead from the data, one sentence of value, no
+     prices or discounts. If assistant_link is given, end with one line inviting them to message our assistant
+     for the catalogue and prices, followed by the link. Follow-ups are shorter and reference the first message.
+   - assistant_link comes from messaging.assistant_link(settings, connection, lead) (B, P3-2).
+   - API: GET /outreach/assisted returns the awaiting_manual_send messages with lead info, the text, the rationale
+     and wa_link = messaging.build_wa_link(lead's primary mobile, text); POST /outreach/messages/{id}/mark-sent →
+     messaging.mark_sent_manually; skip = the existing reject endpoint.
+   - Frontend: a "To send" tab on /outreach, designed **mobile-first** (owners send from their phone): one card
+     per lead with the message (editable, dir="auto"), an "Open in WhatsApp" button (the wa_link), then
+     "I sent it" and "Skip". Show a counter ("7 of 15 sent today") and a gentle hint to send a few at a time.
+     Expose the count of waiting messages in usePendingApprovals so the sidebar badge includes them.
+7. Tests: needs_approval for all modes; the tick selection (quiet hours, working days, cap, paused, opted_out,
    later due), sequence progression over simulated days (freeze the time), no double-send under two concurrent ticks,
-   the missing template path, approve with edited params, reject transitions; component tests for param editing.
+   the missing template path, approve with edited params, reject transitions; assisted mode (the tick creates
+awaiting_manual_send messages and never enqueues them, mark-sent moves the lead to CONTACTED, skip moves it back
+to ENRICHED, opted_out leads get nothing, the demo-mode link points to a whitelisted phone, write_assisted with the
+mock LLM); component tests for param editing and the "To send" card.
 
 Run poe check and npm run check.
 ~~~
-**Definition of done:** with the autonomy mode `approve_all`, enriched leads show up in the queue with good Arabic previews. Approving sends them (to the demo phones). Follow-ups happen on schedule.
+**Definition of done:** with the autonomy mode `approve_all`, enriched leads show up in the queue with good Arabic previews. Approving sends them (to the demo phones). Follow-ups happen on schedule. With `assisted`, the "To send" tab on a phone opens WhatsApp with the message ready, and "I sent it" moves the lead to contacted.
 **Self-check before you push:** approve 3 messages and receive them on your phone; switch to autopilot and confirm the cap and quiet hours are respected.
 
 ---

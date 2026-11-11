@@ -7,7 +7,7 @@
 
 ## P0-2 · Data model, migrations, state machine, tenancy — Wed Nov 11 → Fri Nov 13
 **Start:** right away; the repo scaffold (P0-0) is already on `main`.
-**Files you own:** `backend/app/models/*` (except base.py, which already has `Base` and the mixins), `backend/app/models/enums.py`, `backend/alembic/versions/*` (first migration), `backend/app/core/lead_state.py`, `backend/app/core/tenancy.py`, `backend/app/core/crypto.py`, `frontend/src/lib/types.ts` (enums mirror only), tests.
+**Files you own:** `backend/app/models/*` (except base.py, which already has `Base` and the mixins), `backend/app/models/enums.py`, `backend/alembic/versions/*` (first migration), `backend/app/core/lead_state.py`, `backend/app/core/tenancy.py`, `backend/app/core/crypto.py`, `backend/app/core/refcodes.py`, `frontend/src/lib/types.ts` (enums mirror only), tests.
 
 ~~~text
 Read CLAUDE.md and docs/CONTRACTS.md completely first. CONTRACTS.md §2, §3, §4 and §5 define exactly what you build —
@@ -72,8 +72,11 @@ Frontend:
        placeholder card and leave a TODO with the import path).
    (4) Targets: governorates + cities multi-select, a free-text "describe your ideal customer in your own words"
        box (stored in ideal_customer_text), allowed offers text, max discount slider.
-   (5) Agent behaviour: autonomy mode explained in plain words (Approve every message / Approve only the first
-       message / Full autopilot) with approve_all preselected; daily send cap; quiet hours; working days; demo mode
+   (5) Agent behaviour: first-touch mode explained in plain words ("I send the first message myself with one tap"
+       = assisted, preselected and recommended, vs "The agent sends approved WhatsApp templates" = api_template,
+       with a short warning that WhatsApp forbids cold messages and charges per template); autonomy mode explained in
+       plain words (Approve every message / Approve only the first message / Full autopilot) with approve_all
+       preselected; daily send cap; quiet hours; working days; demo mode
        switch (ON by default) + the whitelist phones input with an explanation of what demo mode does.
    Finish → set onboarding_completed=true and route to /icp with a toast "Now let's build your ideal customer
    profile". Redirect logged-in users with onboarding_completed=false to /onboarding (put the check in a small
@@ -147,7 +150,9 @@ only — never unofficial WhatsApp Web libraries. If unsure about any Graph API 
 of guessing; the Graph API version comes from settings.WHATSAPP_GRAPH_VERSION.
 
 STEP 1 (merge first, same day): app/services/messaging.py with create_outbound, approve_message, reject_message,
-send_message, resolve_demo_target exactly as in the contract, working against the mock channel; job_send_message;
+send_message, resolve_demo_target, mark_sent_manually, build_wa_link and assistant_link exactly as in the contract
+(kind=ASSISTED messages get status awaiting_manual_send and are never enqueued; in demo mode build_wa_link uses
+the whitelisted phone), working against the mock channel; job_send_message;
 a stub job_handle_inbound(ctx, message_id) that only logs (D replaces it in P3-4). Tests. Push it immediately.
 
 STEP 2: the real adapter — adapters/channels/whatsapp_cloud.py (WhatsAppCloudAdapter: ChannelAdapter):
@@ -182,8 +187,10 @@ STEP 4: webhook — app/api/webhooks_whatsapp.py:
   metadata.phone_number_id → channel_connections → tenant. Respond 200 fast; process idempotently
   (provider_message_id unique).
 - Status updates → update messages.status (never downgrade read→delivered); failed → error text.
-- Inbound text: find the lead (demo_routes for whitelisted phones when demo_mode, else contacts.value = from_phone);
-  unknown sender → store a notification "message from unknown number" and stop. Save the message (direction=inbound,
+- Inbound text: find the lead (demo_routes for whitelisted phones when demo_mode, else contacts.value = from_phone,
+  else a "#<ref_code>" in the text → the lead-initiated rule in CONTRACTS §12: add the number as a MOBILE contact
+  with source "lead_initiated" and continue); unknown sender with no valid code → store a notification
+  "message from unknown number" and stop. Save the message (direction=inbound,
   author=LEAD, status=received), set conversation.window_expires_at = timestamp + 24h, lead.last_inbound_at, and
   transition the lead to REPLIED when allowed. Detect STOP words immediately (stop, unsubscribe, and the common Egyptian Arabic ways
   to say "cancel" and "stop sending" — keep the list in one constant): transition OPTED_OUT before anything else. Then enqueue
@@ -207,7 +214,7 @@ routing round-trip (send to lead X → redirected to test phone → an inbound f
 words, daily cap, quiet hours, window_closed, tenant routing by phone_number_id. Use respx for Graph API calls.
 Run poe check and npm run check.
 ~~~
-**Definition of done:** from the UI, a team member connects the test number, sends a test template to their phone, replies, and sees the reply stored against the right lead.
+**Definition of done:** from the UI, a team member connects the test number, sends a test template to their phone, replies, and sees the reply stored against the right lead. A message from a new phone containing a lead's `#ref` code is attached to that lead.
 **Self-check before you push:** do the whole connect → send → reply loop on your own phone; try an invalid token.
 
 ---
@@ -238,7 +245,9 @@ Part 1 — closed feedback loop.
 5. frontend components/insights/InsightsCard.tsx: shows the active insights, the stats table, "Re-run", and
    "Disable"; C will place it on the Reports page (coordinate) — also export a compact version for the dashboard.
 
-Part 2 — demo seed (scripts/seed_demo.py, poe task seed-demo; idempotent; --reset flag):
+Part 2 — demo seed (scripts/seed_demo.py, poe task seed-demo; idempotent; --reset flag). The demo tenant uses
+first_touch_mode=api_template (so the live demo shows the full automatic loop on the team phones) and also has ~5
+assisted messages waiting in /outreach → "To send" to show the safe default:
 6. Create the demo tenant "Little Stars Kids Wear" (fictional kids-clothing factory, 10th of Ramadan) with an owner
    login demo@example.com / a password printed to the console, full settings, a knowledge .md file (write a realistic
    Arabic+English company profile: products, prices, minimum orders, offers up to 10%), an active ICP, ~80 fictional

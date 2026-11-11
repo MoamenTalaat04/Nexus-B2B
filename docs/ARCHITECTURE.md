@@ -45,8 +45,12 @@ The reference "B2B Growth Engine" glues together a dozen SaaS tools and needs a 
                 [Enrichment: Places phone + website crawler] → contacts → enriched | no_contact
                                ▼
          cron every 5 min: [Outreach tick]
-           picks due leads → [Message personalizer] → message (template)
-           → needs_approval? → pending_approval → (human approves) → queued → send
+           picks due leads → [Message personalizer]
+           ├─ first_touch_mode = assisted (default): free-text message → awaiting_manual_send
+           │     → owner taps "Open in WhatsApp" on their phone, sends, taps "I sent it"
+           │     (message includes a link to our AI assistant number + the lead's #ref code)
+           └─ first_touch_mode = api_template (demo / opted-in leads): template message
+                 → needs_approval? → pending_approval → (human approves) → queued → send
                                ▼
                  WhatsApp Cloud API ──► lead's phone (DEMO_MODE → team phone)
                                │
@@ -100,6 +104,7 @@ Every job opens an `agent_run` and writes `agent_steps` (LLM call, tool call, ex
 | Agent inventing prices or discounts | Reply agent answers only from the company profile + knowledge; discount above `max_discount_percent` → escalate |
 | Spamming people who said stop | `opted_out` is terminal and checked at send time |
 | Runaway cost | Model routing (smart vs fast tier), free tier in development, stable prompt prefixes for provider caching, effort settings, per-run cost tracking |
+| WhatsApp bans / cold-messaging rules | Default first-touch mode is **assisted**: the owner sends the first message personally, at low volume, and invites the lead to message our assistant number. The API sends templates only in demo mode or to opted-in leads. Lead-initiated chats are attributed by `#ref_code`. |
 | Provider lock-in | Every LLM call goes through `app/adapters/llm/`; switching provider is a config change |
 | Legal (Egypt PDPL 151/2020) | Record source of every contact, honor opt-out, store only business contact data |
 

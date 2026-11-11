@@ -36,6 +36,10 @@ class ReplyIntent(StrEnum):
 class AutonomyMode(StrEnum):
     APPROVE_ALL = "approve_all"; APPROVE_FIRST_TOUCH = "approve_first_touch"; AUTOPILOT = "autopilot"
 
+class FirstTouchMode(StrEnum):
+    ASSISTED = "assisted"           # the owner sends first touches/follow-ups from their own WhatsApp (wa.me link)
+    API_TEMPLATE = "api_template"   # the agent sends approved templates through the Cloud API (demo / opted-in leads)
+
 class AgentRunKind(StrEnum):
     ICP_BUILD = "icp_build"; SOURCING = "sourcing"; SCORING = "scoring"
     ENRICHMENT = "enrichment"; OUTREACH_TICK = "outreach_tick"; REPLY = "reply"; FEEDBACK = "feedback"
@@ -52,9 +56,10 @@ class ContactType(StrEnum):
     FACEBOOK = "facebook"; INSTAGRAM = "instagram"; WEBSITE = "website"
 class MessageDirection(StrEnum): OUTBOUND = "outbound"; INBOUND = "inbound"
 class MessageAuthor(StrEnum): AGENT = "agent"; HUMAN = "human"; LEAD = "lead"
-class MessageKind(StrEnum): TEMPLATE = "template"; TEXT = "text"
+class MessageKind(StrEnum): TEMPLATE = "template"; TEXT = "text"; ASSISTED = "assisted"   # assisted = sent by the owner via a wa.me link
 class MessageStatus(StrEnum):
     PENDING_APPROVAL = "pending_approval"; APPROVED = "approved"; REJECTED = "rejected"
+    AWAITING_MANUAL_SEND = "awaiting_manual_send"   # assisted: ready for the owner to send from their phone
     QUEUED = "queued"; SENT = "sent"; DELIVERED = "delivered"; READ = "read"
     FAILED = "failed"; RECEIVED = "received"; BLOCKED = "blocked"   # blocked = refused by a guardrail (opt-out, cap)
 class OutreachPurpose(StrEnum): FIRST_TOUCH = "first_touch"; FOLLOWUP = "followup"; REPLY = "reply"
@@ -69,13 +74,13 @@ Intent → status mapping (used by the reply pipeline):
 |---|---|---|
 | `tenants` | `name` | P0-2 |
 | `users` | `tenant_id`, `email` (unique, lowercase), `password_hash` (argon2), `full_name`, `role` ('owner'\|'member') | P0-2 |
-| `business_settings` | `tenant_id` (unique), `company_name`, `website`, `description`, `ideal_customer_text text` (owner's own words about who they sell to), `products jsonb` (list of {name, description, price_range, min_order}), `target_regions jsonb` (list of {governorate, cities[]}), `language` ('ar-EG'\|'en'), `tone` ('friendly'\|'formal'), `allowed_offers text`, `max_discount_percent int default 0`, `autonomy_mode default 'approve_all'`, `agent_enabled bool default false`, `daily_new_leads_target int default 30`, `daily_send_cap int default 20`, `quiet_hours_start time default '10:00'`, `quiet_hours_end time default '20:00'`, `working_days int[] default {0,1,2,3,5,6}` (Mon=0 … Sun=6; default Sat–Thu), `score_threshold int default 6`, `sequence_steps jsonb default [{"day_offset":0,"purpose":"first_touch","template":"intro"},{"day_offset":3,"purpose":"followup","template":"followup"}]`, `demo_mode bool default true`, `demo_whitelist jsonb default []` (E.164 list), `telegram_chat_id text null`, `telegram_link_code text null`, `onboarding_completed bool default false` | P0-2 (cols), P1-2 (API/UI) |
+| `business_settings` | `tenant_id` (unique), `company_name`, `website`, `description`, `ideal_customer_text text` (owner's own words about who they sell to), `products jsonb` (list of {name, description, price_range, min_order}), `target_regions jsonb` (list of {governorate, cities[]}), `language` ('ar-EG'\|'en'), `tone` ('friendly'\|'formal'), `allowed_offers text`, `max_discount_percent int default 0`, `autonomy_mode default 'approve_all'`, `first_touch_mode default 'assisted'` FirstTouchMode, `agent_enabled bool default false`, `daily_new_leads_target int default 30`, `daily_send_cap int default 20`, `quiet_hours_start time default '10:00'`, `quiet_hours_end time default '20:00'`, `working_days int[] default {0,1,2,3,5,6}` (Mon=0 … Sun=6; default Sat–Thu), `score_threshold int default 6`, `sequence_steps jsonb default [{"day_offset":0,"purpose":"first_touch","template":"intro"},{"day_offset":3,"purpose":"followup","template":"followup"}]`, `demo_mode bool default true`, `demo_whitelist jsonb default []` (E.164 list), `telegram_chat_id text null`, `telegram_link_code text null`, `onboarding_completed bool default false` | P0-2 (cols), P1-2 (API/UI) |
 | `knowledge_files` | `tenant_id`, `filename`, `mime_type`, `size_bytes`, `storage_path`, `extracted_text text`, `char_count int`, `status` ('processing'\|'ready'\|'failed'), `error text` | P0-2, P1-1 |
 | `icp_versions` | `tenant_id`, `version int`, `company_profile jsonb` (CompanyProfile), `icp jsonb` (ICP), `source` ('agent'\|'user'), `is_active bool`, `notes text`; unique(tenant_id, version) | P0-2, P1-3 |
 | `agent_runs` | `tenant_id`, `kind` AgentRunKind, `status` AgentRunStatus, `trigger` ('manual'\|'schedule'\|'webhook'\|'chained'), `input jsonb`, `output_summary jsonb`, `error text`, `started_at`, `finished_at`, `total_input_tokens int`, `total_output_tokens int`, `total_cost_usd numeric(12,6)` | P0-2, P0-3 |
 | `agent_steps` | `tenant_id`, `run_id` FK, `seq int`, `step_type` StepType, `name text`, `input jsonb`, `output jsonb`, `model text null`, `input_tokens int`, `output_tokens int`, `cache_read_tokens int`, `cost_usd numeric(12,6)`, `latency_ms int`, `lead_id uuid null` | P0-2, P0-3 |
 | `search_queries` | `tenant_id`, `run_id`, `source text`, `query_text`, `region jsonb`, `results_count int` | P0-2, P2-1 |
-| `leads` | `tenant_id`, `source text`, `source_ref text` (e.g. place_id), `name`, `category text`, `address`, `city`, `governorate`, `lat float`, `lng float`, `website`, `domain`, `google_maps_url`, `rating float`, `reviews_count int`, `raw jsonb`, `status` LeadStatus default 'new', `score int null`, `score_reasons jsonb` (list[str]), `disqualify_reason text`, `icp_version_id uuid null`, `sourcing_run_id uuid null`, `sequence_step int default 0`, `next_action_at timestamptz null`, `agent_paused bool default false`, `first_contacted_at`, `last_outbound_at`, `last_inbound_at`, `dedupe_key text`; unique(tenant_id, dedupe_key) | P0-2 |
+| `leads` | `tenant_id`, `source text`, `source_ref text` (e.g. place_id), `name`, `category text`, `address`, `city`, `governorate`, `lat float`, `lng float`, `website`, `domain`, `google_maps_url`, `rating float`, `reviews_count int`, `raw jsonb`, `status` LeadStatus default 'new', `score int null`, `score_reasons jsonb` (list[str]), `disqualify_reason text`, `icp_version_id uuid null`, `sourcing_run_id uuid null`, `sequence_step int default 0`, `next_action_at timestamptz null`, `agent_paused bool default false`, `first_contacted_at`, `last_outbound_at`, `last_inbound_at`, `ref_code text` (short code for lead-initiated chats, from `new_ref_code()`; unique per tenant), `dedupe_key text`; unique(tenant_id, dedupe_key) | P0-2 |
 | `contacts` | `tenant_id`, `lead_id`, `type` ContactType, `value` (normalized), `source` ('google_places'\|'website'\|'manual'), `is_primary bool`, `confidence float`; unique(tenant_id, lead_id, type, value) | P0-2 |
 | `channel_connections` | `tenant_id`, `channel` ChannelType, `status` ('connected'\|'error'\|'disconnected'), `config jsonb` (non-secret: phone_number_id, waba_id, display_phone_number), `secrets_encrypted text` (Fernet JSON), `last_checked_at`, `last_error`; unique(tenant_id, channel) | P0-2, P3-2 |
 | `message_templates` | `tenant_id`, `channel`, `name` (Meta template name), `language` ('ar'), `category`, `purpose` ('intro'\|'followup'), `body_text`, `param_count int`, `status` ('approved'\|'pending'\|'rejected') | P0-2, P3-2 |
@@ -143,6 +148,9 @@ def is_eg_mobile(e164: str) -> bool                    # +20 10/11/12/15 + 8 dig
 # app/core/tenancy.py
 async def get_settings_for(session, tenant_id) -> BusinessSettings
 ```
+
+`app/core/refcodes.py` (P0-2): `def new_ref_code() -> str` — 6 characters from an alphabet without look-alikes
+(no 0/O/1/I/L), used as the default for `leads.ref_code`.
 
 ## 6. LLM layer (`app/agents/llm.py`, P0-3)
 
@@ -301,6 +309,10 @@ class LeadScore(BaseModel):
     disqualify_reason: str | None = None
 class LeadScoreBatch(BaseModel): scores: list[LeadScore]
 
+class AssistedMessage(BaseModel):     # assisted mode: free text the owner sends from their own WhatsApp
+    text: str                        # Egyptian Arabic, ≤ 500 chars, ends with the assistant link line if given
+    rationale: str
+
 class PersonalizedOpening(BaseModel):
     template_params: list[str]       # exactly param_count items; no newlines/tabs; ≤ 60 chars each
     preview_text: str                # rendered message for the approval UI
@@ -322,6 +334,14 @@ async def create_outbound(session, *, tenant_id, lead_id, purpose: OutreachPurpo
                           agent_run_id: UUID | None = None) -> Message
     # status = pending_approval if needs_approval else queued (and enqueues job_send_message).
     # Refuses (status=blocked) if the lead is opted_out.
+    # kind=ASSISTED: status = awaiting_manual_send, never enqueued, needs_approval ignored (the owner sends it).
+async def mark_sent_manually(session, *, tenant_id, message_id, user_id) -> Message
+    # assisted only: awaiting_manual_send → sent (sent_at=now), then outreach.on_message_sent(session, message).
+def build_wa_link(phone_e164: str, text: str) -> str
+    # https://wa.me/<digits>?text=<url-encoded text>. In demo_mode the phone is resolve_demo_target(...).
+def assistant_link(settings, connection, lead) -> str | None
+    # wa.me link to the tenant's own Cloud API number with a pre-filled Egyptian Arabic text that ends with
+    # "#<lead.ref_code>"; None when no WhatsApp number is connected.
 async def approve_message(session, *, tenant_id, message_id, user_id, edited_params: list[str] | None = None,
                           edited_body: str | None = None) -> Message
 async def reject_message(session, *, tenant_id, message_id, user_id) -> Message
@@ -379,6 +399,7 @@ Enqueue helper: `app/workers/queue.py: async def enqueue(job_name: str, **kwargs
 | POST `/leads/{id}/messages` {body} | manual WhatsApp text inside the 24h window | P4-1 |
 | GET `/leads/export.xlsx` | Excel export | P4-1 |
 | GET `/outreach/queue` ; POST `/outreach/messages/{id}/approve` {params?, body?} ; POST `/outreach/messages/{id}/reject` ; POST `/outreach/approve-bulk` {ids} | approvals | P3-3 |
+| GET `/outreach/assisted` (awaiting_manual_send messages + `wa_link`) ; POST `/outreach/messages/{id}/mark-sent` ; skip = `/reject` | assisted sending | P3-3 |
 | GET `/channels` ; PUT `/channels/whatsapp` {phone_number_id, waba_id, access_token} ; POST `/channels/whatsapp/test` {to} ; POST `/channels/whatsapp/templates/sync` | | P3-2 |
 | GET/POST `/webhooks/whatsapp` | Meta webhook (verify + events) | P3-2 |
 | POST `/channels/telegram/link` → {deep_link} ; POST `/webhooks/telegram` | | P4-2 |
@@ -392,6 +413,12 @@ When `settings.demo_mode` is true, `send_message` sends to `resolve_demo_target(
 - It picks the whitelisted phone that has been unused for longest (or the one already routed to this lead), upserts `demo_routes(test_phone → lead_id)`, and stores it in `messages.redirected_to`.
 - An inbound message from a whitelisted phone is attributed to `demo_routes[test_phone].lead_id`.
 - If the whitelist is empty, sending is blocked (`status=blocked`, error `demo_whitelist_empty`).
+- Assisted messages follow the same rule: in demo mode their `wa_link` opens a chat with the whitelisted phone, never the lead's real number.
+
+### Lead-initiated chats (assisted mode)
+An inbound message from an unknown number that contains `#<ref_code>` of one of the tenant's leads is attributed to that lead:
+add the number as a MOBILE contact (source `lead_initiated`), create the conversation, open the 24h window, then continue as a normal inbound message.
+Lead-initiated conversations are what WhatsApp's rules expect, and they cost nothing to receive.
 
 ## 13. Environment variables (`.env.example`)
 ```

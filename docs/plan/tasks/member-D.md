@@ -233,15 +233,19 @@ Owners must hear about hot leads within a minute, on their phone, without openin
    Debounce: max 1 Telegram message per lead per 10 minutes.
    Also notify on: a failed run (kind run_failed), pending approvals piling up (needs_approval, at most once every
    3 hours when > 10 are pending).
+3b. Assisted mode reminder: once a day at the start of working hours (a CRON_JOBS entry), if a tenant has messages
+   awaiting manual send, notify_owner(kind="assisted_ready", "N messages are ready for you to send") with a link
+   to /outreach (Telegram + in-app).
 4. GET /notifications (unread first, paginated), POST /notifications/{id}/read, POST /notifications/read-all.
 5. GET /dashboard: today's and this week's numbers (new leads, qualified, messages sent, replies, hot leads, won),
-   the agent state (enabled? last run, next scheduled run), pending approvals count, the 5 latest hot leads, the 5
+   the agent state (enabled? last run, next scheduled run), pending approvals count, assisted messages waiting
+   to be sent, the 5 latest hot leads, the 5
    latest notifications, and this week's LLM cost.
 6. Frontend: the notifications bell in the top bar (the slot from P0-4) with an unread badge, a dropdown list, click →
    lead page; poll every 30 s. A "Connect Telegram" card in Settings → Channels (B's ChannelsSettings has a slot — add a
    <TelegramConnect/> component and ask B to render it). The dashboard home: a greeting, a big Agent ON/OFF switch
    (PUT /settings agent_enabled, with confirmation and a reminder about demo mode), KPI cards, "Needs your attention"
-   (approvals, hot leads, wants management), a recent-activity feed, and B's compact insights component when available.
+   (approvals, messages waiting for you to send, hot leads, wants management), a recent-activity feed, and B's compact insights component when available.
 7. Tests: the link flow (valid/expired/forged code), the webhook secret check, the notify debounce, Telegram failure
    isolation, dashboard numbers on a seeded dataset, tenant isolation. Component tests for the bell.
 
