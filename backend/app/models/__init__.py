@@ -4,5 +4,20 @@ P0-2 adds the domain models (one file per area) and imports them below.
 """
 
 from app.models.base import Base, TenantMixin, TimestampMixin, UUIDPkMixin
+from app.models.icp import IcpVersion
+from app.models.leads import SearchQuery
+from app.models.runs import AgentRun, AgentStep
+from app.models.tenants import BusinessSettings, Tenant
 
-__all__ = ["Base", "TenantMixin", "TimestampMixin", "UUIDPkMixin"]
+__all__ = [
+    "AgentRun",
+    "AgentStep",
+    "Base",
+    "BusinessSettings",
+    "IcpVersion",
+    "SearchQuery",
+    "Tenant",
+    "TenantMixin",
+    "TimestampMixin",
+    "UUIDPkMixin",
+]

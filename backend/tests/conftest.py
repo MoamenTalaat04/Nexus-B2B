@@ -11,7 +11,7 @@ import os
 # Force safe settings BEFORE the app (and its settings) are imported.
 os.environ["USE_MOCK_ADAPTERS"] = "true"
 os.environ["USE_MOCK_LLM"] = "true"
-os.environ.setdefault("JWT_SECRET", "test-secret")
+os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long!")
 
 from collections.abc import AsyncIterator
 
@@ -20,10 +20,11 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app import models  # noqa: F401  (register all models)
 from app.config import settings
+from app.core import tracing
 from app.db import get_session
 from app.main import app
 from app.models.base import Base
@@ -67,9 +68,15 @@ async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     async with engine.connect() as conn:
         trans = await conn.begin()
         sess = AsyncSession(bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint")
+        # Trace writes (app.core.tracing) use the same connection, so they see this test's data and are
+        # rolled back with it.
+        tracing.use_session_factory(
+            async_sessionmaker(bind=conn, expire_on_commit=False, join_transaction_mode="create_savepoint")
+        )
         try:
             yield sess
         finally:
+            tracing.use_session_factory(None)
             await sess.close()
             await trans.rollback()
 

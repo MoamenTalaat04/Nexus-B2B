@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     LLM_MODEL_SMART: str = ""
     LLM_MODEL_FAST: str = ""
     LLM_MAX_CONCURRENCY: int = 2
+    # Comma-separated model ids that accept `reasoning_effort`; for any other model the effort is not sent.
+    LLM_REASONING_MODELS: str = ""
+    LLM_TIMEOUT_SECONDS: float = 120.0
 
     # External services
     GOOGLE_PLACES_API_KEY: str = ""

@@ -1,0 +1,12 @@
+{
+  "queries": [
+    {"query": "محل ملابس اطفال", "region": {"governorate": "Cairo", "cities": ["Nasr City"]}, "rationale": "أشهر بحث لمحلات الأطفال"},
+    {"query": "ملابس بيبي", "region": {"governorate": "Cairo", "cities": ["Nasr City"]}, "rationale": "محلات البيبي بتشتري جملة"},
+    {"query": "محل ملابس اطفال", "region": {"governorate": "Cairo", "cities": ["Heliopolis"]}, "rationale": "تغطية مصر الجديدة"},
+    {"query": "ملابس ولادي وبناتي", "region": {"governorate": "Cairo", "cities": ["Heliopolis"]}, "rationale": "صيغة شائعة في أسماء المحلات"},
+    {"query": "kids wear", "region": {"governorate": "Cairo", "cities": ["Nasr City", "Heliopolis"]}, "rationale": "محلات بأسماء إنجليزي"},
+    {"query": "محل ملابس اطفال", "region": {"governorate": "Giza", "cities": []}, "rationale": "تغطية الجيزة"},
+    {"query": "baby shop", "region": {"governorate": "Giza", "cities": []}, "rationale": "محلات بيبي بأسماء إنجليزي"},
+    {"query": "ملابس اطفال حديثي الولادة", "region": {"governorate": "Giza", "cities": []}, "rationale": "شريحة البيبي"}
+  ]
+}
