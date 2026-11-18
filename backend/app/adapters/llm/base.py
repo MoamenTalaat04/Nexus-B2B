@@ -3,7 +3,8 @@
 `app.agents.llm` talks only to an `LLMProvider`; concrete providers live next to this file.
 Messages use one neutral shape:
     {"role": "user" | "assistant", "content": str}
-    {"role": "assistant", "content": str | None, "tool_calls": [{"id", "name", "arguments": dict}]}
+    {"role": "assistant", "content": str | None, "tool_calls": [{"id", "name", "arguments": dict,
+        "provider_extra"?: dict}]}   # provider fields to send back unchanged (e.g. Gemini thought signatures)
     {"role": "tool", "tool_call_id": str, "content": str}
 """
 

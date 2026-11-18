@@ -273,3 +273,33 @@ def test_get_llm_provider_validates_settings(monkeypatch: pytest.MonkeyPatch) ->
     assert isinstance(first, OpenAICompatibleProvider)
     assert get_llm_provider() is first
     llm_adapters._cache.clear()
+
+
+async def test_gemini_thought_signature_is_sent_back_unchanged() -> None:
+    """Gemini 3+ rejects a follow-up turn (HTTP 400) unless the tool call's thought signature comes back."""
+    signed = {
+        "id": "c1",
+        "type": "function",
+        "function": {"name": "lookup_price", "arguments": '{"product": "tshirt"}'},
+        "extra_content": {"google": {"thought_signature": "SIG-abc123"}},
+    }
+    plain = {"id": "c2", "type": "function", "function": {"name": "lookup_price", "arguments": "{}"}}
+    http = MockHTTP(completion(content=None, finish="tool_calls", tool_calls=[signed, plain]), completion())
+    p = provider(http)
+    first = await call(p, tools=[{"name": "lookup_price", "parameters": {"type": "object"}}])
+    assert first.tool_calls[0]["provider_extra"] == {
+        "extra_content": {"google": {"thought_signature": "SIG-abc123"}}
+    }
+    assert "provider_extra" not in first.tool_calls[1]
+
+    history = [
+        {"role": "user", "content": "price?"},
+        {"role": "assistant", "content": None, "tool_calls": first.tool_calls},
+        {"role": "tool", "tool_call_id": "c1", "content": "{}"},
+        {"role": "tool", "tool_call_id": "c2", "content": "{}"},
+    ]
+    await call(p, messages=history, tools=[{"name": "lookup_price", "parameters": {"type": "object"}}])
+    sent_calls = http.body(1)["messages"][2]["tool_calls"]
+    assert sent_calls[0]["extra_content"] == {"google": {"thought_signature": "SIG-abc123"}}
+    assert sent_calls[0]["function"]["name"] == "lookup_price" and "extra_content" not in sent_calls[1]
+    assert "provider_extra" not in sent_calls[0]

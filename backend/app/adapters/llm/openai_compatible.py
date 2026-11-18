@@ -54,6 +54,9 @@ def _to_openai_message(message: dict[str, Any]) -> dict[str, Any]:
             "content": message.get("content"),
             "tool_calls": [
                 {
+                    **(
+                        call.get("provider_extra") or {}
+                    ),  # e.g. Gemini's thought signature, sent back as received
                     "id": call["id"],
                     "type": "function",
                     "function": {
@@ -77,6 +80,25 @@ def _parse_arguments(raw: str | None) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {"_invalid_json": raw}
     return parsed if isinstance(parsed, dict) else {"_value": parsed}
+
+
+_TOOL_CALL_FIELDS = {"id", "type", "function"}
+
+
+def _tool_call(call: Any) -> dict[str, Any]:
+    """Neutral tool call. Unknown provider fields are kept in `provider_extra` and sent back unchanged on the
+    next turn: Gemini 3+ requires its `extra_content.google.thought_signature` to come back, or it rejects
+    the follow-up request with HTTP 400."""
+    raw = call.model_dump() if hasattr(call, "model_dump") else {}
+    extra = {k: v for k, v in raw.items() if k not in _TOOL_CALL_FIELDS and v is not None}
+    result: dict[str, Any] = {
+        "id": call.id,
+        "name": call.function.name,
+        "arguments": _parse_arguments(call.function.arguments),
+    }
+    if extra:
+        result["provider_extra"] = extra
+    return result
 
 
 def _retry_after(exc: openai.APIStatusError) -> float | None:
@@ -227,13 +249,7 @@ class OpenAICompatibleProvider:
         choice = response.choices[0]
         message = choice.message
         tool_calls = [
-            {
-                "id": call.id,
-                "name": call.function.name,
-                "arguments": _parse_arguments(call.function.arguments),
-            }
-            for call in (message.tool_calls or [])
-            if getattr(call, "function", None) is not None
+            _tool_call(call) for call in (message.tool_calls or []) if getattr(call, "function", None)
         ]
         reason = choice.finish_reason
         finish: Finish

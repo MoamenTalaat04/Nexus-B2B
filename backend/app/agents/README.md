@@ -115,6 +115,7 @@ support a provider without an OpenAI-compatible endpoint, add a module in `app/a
 |---|---|---|---|
 | ICP builder (P1-3) | `icp_builder.py` / `prompts/icp_builder.md` (`icp_builder@1`) | `icp_builder.profile` → CompanyProfile, `icp_builder.icp` → ICP (SMART, medium) | `job_build_icp`, `POST /icp/generate` |
 | Query generator (P2-1) | `query_generator.py` / `prompts/query_generator.md` (`query_generator@1`) | `query_generator.plan` → QueryPlan (FAST, low) | B's sourcing job (P2-2); `recent_queries()` gives it `already_used` |
+| Message personalizer (P3-3) | `message_personalizer.py` / `prompts/message_personalizer.md` (`message_personalizer@1`) | `message_personalizer.opening` → PersonalizedOpening, `message_personalizer.assisted` → AssistedMessage (FAST, low) | `services/outreach.py` (job_outreach_tick) |
 
 The ICP builder is the reference example: one shared `cached_context`, untrusted data in tags, code guardrails
 after the model (the owner's settings win), a DECISION step that records what the guardrails changed, and mock
