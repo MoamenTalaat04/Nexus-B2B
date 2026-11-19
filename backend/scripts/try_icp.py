@@ -3,6 +3,9 @@
     cd backend
     uv run python -m scripts.try_icp                       # prints the CompanyProfile + ICP as JSON
     uv run python -m scripts.try_icp --out ../docs/x.json  # also saves it (UTF-8)
+    uv run python -m scripts.try_icp --business medical    # a very different business (kids | medical)
+
+Also flags numbers in the output that never appear in the inputs (a quick "did it invent facts?" check).
 
 Needs USE_MOCK_LLM=false and the LLM_* values in .env. Creates a temporary tenant with demo onboarding answers
 and a short demo catalogue, runs the real ICP builder (two SMART calls), prints the result plus tokens/cost,
@@ -11,6 +14,7 @@ then deletes the tenant. All data is made up: free tiers may use requests to imp
 
 import asyncio
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -26,8 +30,9 @@ from app.models.runs import AgentRun, AgentStep
 from app.models.tenants import BusinessSettings, Tenant
 
 OUT_PATH = sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else None
+BUSINESS = sys.argv[sys.argv.index("--business") + 1] if "--business" in sys.argv else "kids"
 
-DEMO_SETTINGS = {
+KIDS_SETTINGS = {
     "company_name": "مصنع نور لملابس الأطفال (شركة تجريبية)",
     "website": "https://nour-kids.example",
     "description": "مصنع ملابس أطفال في شبرا الخيمة، بننتج أطقم صيفي وترينجات وبيجامات من سنة لـ 12 سنة.",
@@ -53,13 +58,62 @@ DEMO_SETTINGS = {
     "allowed_offers": "خصم 5% على أول طلبية فوق 10 دستة",
     "max_discount_percent": 5,
 }
-DEMO_KNOWLEDGE = """### catalogue.md
+KIDS_KNOWLEDGE = """### catalogue.md
 مصنع نور لملابس الأطفال — كتالوج موسم الصيف (بيانات تجريبية)
 - أطقم قطن 100% من سنة لـ 8 سنين، ألوان ثابتة وخياطة مزدوجة.
 - توصيل للقاهرة والجيزة خلال 3 أيام عمل.
 - الدفع: نص المبلغ مقدم والباقي عند الاستلام.
 - أقل طلبية 3 دستة من الموديل، وممكن تقسيم المقاسات.
 """
+
+
+# A very different business: distributor (not a factory), Alexandria, clinics as customers, English + Arabic
+# notes, and deliberately NO prices or minimum orders, so any price in the output would be invented.
+MEDICAL_SETTINGS = {
+    "company_name": "Delta Med Supplies (demo company)",
+    "website": "",
+    "description": "We distribute dental and clinic consumables in Alexandria: gloves, masks, syringes, "
+    "dental burs and sterilization pouches. Imported brands, local stock.",
+    "ideal_customer_text": "عيادات الأسنان والعيادات الخاصة الصغيرة في إسكندرية اللي بتشتري مستلزمات كل شهر",
+    "products": [
+        {
+            "name": "Nitrile gloves",
+            "description": "boxes of 100, sizes S-XL",
+            "price_range": None,
+            "min_order": None,
+        },
+        {"name": "Dental burs", "description": "diamond and carbide", "price_range": None, "min_order": None},
+        {
+            "name": "Sterilization pouches",
+            "description": "self-sealing",
+            "price_range": None,
+            "min_order": None,
+        },
+    ],
+    "target_regions": [{"governorate": "Alexandria", "cities": ["Smouha", "Mansheya"]}],
+    "language": "ar-EG",
+    "tone": "formal",
+    "allowed_offers": "",
+    "max_discount_percent": 0,
+}
+MEDICAL_KNOWLEDGE = """### about.txt
+Delta Med Supplies (demo data) - consumables distributor based in Smouha, Alexandria.
+- Delivery inside Alexandria next working day.
+- Monthly supply contracts for clinics.
+- We do NOT sell equipment (chairs, X-ray) - consumables only.
+"""
+
+DEMO_BUSINESSES = {
+    "kids": (KIDS_SETTINGS, KIDS_KNOWLEDGE),
+    "medical": (MEDICAL_SETTINGS, MEDICAL_KNOWLEDGE),
+}
+
+
+def invented_numbers(inputs: str, output: str) -> list[str]:
+    """Numbers in the output that never appear in the inputs (Arabic-Indic digits normalized)."""
+    table = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+    found_in = set(re.findall(r"\d+(?:[.,]\d+)?", inputs.translate(table)))
+    return sorted({n for n in re.findall(r"\d+(?:[.,]\d+)?", output.translate(table)) if n not in found_in})
 
 
 async def main() -> int:
@@ -70,7 +124,9 @@ async def main() -> int:
         tenant = Tenant(name=f"ICP demo (temporary) {uuid.uuid4().hex[:6]}")
         session.add(tenant)
         await session.flush()
-        session.add(BusinessSettings(tenant_id=tenant.id, onboarding_completed=True, **DEMO_SETTINGS))
+        session.add(
+            BusinessSettings(tenant_id=tenant.id, onboarding_completed=True, **DEMO_BUSINESSES[BUSINESS][0])
+        )
         await session.commit()
     try:
         async with SessionLocal() as session:
@@ -80,7 +136,9 @@ async def main() -> int:
             async with agent_run(
                 tenant.id, AgentRunKind.ICP_BUILD, trigger="manual", input={"demo": True}
             ) as run:
-                profile, icp = await icp_builder.build_icp(run, settings=s, knowledge_text=DEMO_KNOWLEDGE)
+                profile, icp = await icp_builder.build_icp(
+                    run, settings=s, knowledge_text=DEMO_BUSINESSES[BUSINESS][1]
+                )
         result = json.dumps(
             {"company_profile": profile.model_dump(), "icp": icp.model_dump()}, ensure_ascii=False, indent=2
         )
@@ -102,6 +160,9 @@ async def main() -> int:
             f"estimated cost ${float(row.total_cost_usd):.4f} at paid prices"
         )
         guard = next((st.output for st in steps if st.name == "icp_builder.guardrails"), {})
+        settings_in, knowledge_in = DEMO_BUSINESSES[BUSINESS]
+        invented = invented_numbers(json.dumps(settings_in, ensure_ascii=False) + knowledge_in, result)
+        print("numbers not found in the inputs:", invented or "none")
         print("guardrail changes:", list((guard or {}).get("changes", {}).keys()) or "none")
         return 0
     finally:
