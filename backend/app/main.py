@@ -34,6 +34,12 @@ def _error(status_code: int, code: str, message: str, **extra: Any) -> JSONRespo
 
 
 def build_api_router() -> APIRouter:
+    if settings.USE_MOCK_API:
+        from app.mock_api.router import build_mock_router
+
+        logger.warning("USE_MOCK_API=true: serving in-memory Mock API under %s", API_PREFIX)
+        return build_mock_router()
+
     api = APIRouter(prefix=API_PREFIX)
 
     @api.get("/health", tags=["health"])
@@ -98,6 +104,12 @@ def create_app() -> FastAPI:
     async def handle_unexpected(_: Request, exc: Exception) -> JSONResponse:
         logger.exception("unhandled error", exc_info=exc)
         return _error(500, "internal_error", "Something went wrong")
+
+    @application.get("/health", tags=["health"], include_in_schema=True)
+    async def root_health() -> dict[str, str]:
+        if settings.USE_MOCK_API:
+            return {"status": "ok", "db": "ok", "redis": "ok", "mode": "mock"}
+        return {"status": "ok"}
 
     application.include_router(build_api_router())
     return application

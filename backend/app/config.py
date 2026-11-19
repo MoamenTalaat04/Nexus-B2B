@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     PUBLIC_BASE_URL: str = "http://localhost:8000"
     FRONTEND_ORIGIN: str = "http://localhost:3000"
 
-    # Mocks: on by default so nobody needs real keys to develop
+    # Mocks: adapters/LLM on by default for dev; USE_MOCK_API must be explicitly enabled
+    USE_MOCK_API: bool = False
     USE_MOCK_ADAPTERS: bool = True
     USE_MOCK_LLM: bool = True
 

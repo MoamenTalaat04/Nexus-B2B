@@ -1,0 +1,58 @@
+/* NEXUS Design Tokens — Emerald-to-Lime Gradient Palette (Light Mode & Derived Dark Forest-Lime Mode) */
+
+:root {
+  --surface: #f7faf3;
+  --surface-secondary: #edf6df;
+  --primary-hover: #427d1e;
+  --primary-light: #ecf8d4;
+  --emerald-dark: #1a3314;
+  --emerald-deep: #0b160c;
+
+  --background: #ffffff;
+  --foreground: #0f1f12;
+  --card: #ffffff;
+  --card-foreground: #0f1f12;
+  --popover: #ffffff;
+  --popover-foreground: #0f1f12;
+  --primary: #529927;
+  --primary-foreground: #ffffff;
+  --secondary: #edf6df;
+  --secondary-foreground: #1a3314;
+  --muted: #f7faf3;
+  --muted-foreground: #5c6e5e;
+  --accent: #ecf8d4;
+  --accent-foreground: #1a3314;
+  --destructive: #dc2626;
+  --border: #dce7d5;
+  --input: #dce7d5;
+  --ring: #65a30d;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --surface: #112014;
+  --surface-secondary: #192e1d;
+  --primary-hover: #a3e635;
+  --primary-light: #192e1d;
+  --emerald-dark: #1a3314;
+  --emerald-deep: #070e08;
+
+  --background: #0a140c;
+  --foreground: #f3f8f1;
+  --card: #112014;
+  --card-foreground: #f3f8f1;
+  --popover: #112014;
+  --popover-foreground: #f3f8f1;
+  --primary: #84cc16;
+  --primary-foreground: #0a140c;
+  --secondary: #192e1d;
+  --secondary-foreground: #f3f8f1;
+  --muted: #112014;
+  --muted-foreground: #9db29f;
+  --accent: #192e1d;
+  --accent-foreground: #f3f8f1;
+  --destructive: #ef4444;
+  --border: #223d27;
+  --input: #223d27;
+  --ring: #84cc16;
+}
