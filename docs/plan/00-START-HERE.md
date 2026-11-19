@@ -23,7 +23,7 @@ It is based on the "B2B Growth Engine" architecture (Bombora, Apollo, Apify, Cla
 |---|---|---|---|---|---|---|
 | A | ______ | P0-1 Accounts, adapters & mocks | P1-1 Knowledge upload | P2-3 Lead scoring agent ⭐ | P3-1 Website enrichment | P4-1 CRM & lead detail |
 | B | ______ | P0-2 Data model & state machine | P1-2 Onboarding & settings | P2-2 Normalize, dedupe, sourcing job | P3-2 WhatsApp channel | P4-4 Feedback loop & demo seed ⭐ |
-| C | ______ | P0-3 LLM layer & tracing ⭐ | P1-3 ICP builder agent ⭐ | P2-1 Query gen + Google Places | P3-3 Outreach engine & approvals ⭐ | P4-3 Reports & cost ⭐ |
+| C | Moamen Talaat | P0-3 LLM layer & tracing ⭐ | P1-3 ICP builder agent ⭐ | P2-1 Query gen + Google Places | P3-3 Outreach engine & approvals ⭐ | P4-3 Reports & cost ⭐ |
 | D | ______ | P0-4 Auth & frontend shell | P1-4 ICP editor + eval harness ⭐ | P2-4 Leads UI + Agent Activity ⭐ | P3-4 Reply agent ⭐⭐ | P4-2 Escalation, Telegram, dashboard |
 
 **P0-0 Repo scaffold is already done** (built by Claude on Nov 11, so nobody waits on it). Because of that, A took

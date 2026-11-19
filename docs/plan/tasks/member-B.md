@@ -6,10 +6,27 @@
 ---
 
 ## P0-2 · Data model, migrations, state machine, tenancy — Wed Nov 11 → Fri Nov 13
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - **Already built (stand-ins, column by column from CONTRACTS §2–§5) with migrations `0002`–`0005`:**
+>   `models/enums.py` (*all* enums + `INTENT_TO_STATUS` + `enum_check`), `models/tenants.py` (tenants + business_settings),
+>   `models/runs.py`, `models/icp.py`, `models/leads.py` (search_queries, leads, contacts, lead_status_history),
+>   `models/messaging.py` (channel_connections, message_templates, conversations, messages), `models/notifications.py`,
+>   `core/lead_state.py` (the full §4 table + `transition`), `core/tenancy.py` (`get_settings_for`), `core/refcodes.py`.
+> - **Left for you:** `users`, `lead_notes`, `lead_outcomes`, `demo_routes` and `learned_insights` in a **new migration
+>   that revises `0005`** (don't generate a new first migration), `core/crypto.py`, `scoped(...)`, the TS enum mirror +
+>   `scripts/export_enums.py`, `models/README.md`, and the transition/crypto tests. Check the stand-ins against §3 and
+>   keep or fix them.
+> - 👉 **Talk to Moamen** before changing any existing table, so his tests keep passing.
+
 **Start:** right away; the repo scaffold (P0-0) is already on `main`.
 **Files you own:** `backend/app/models/*` (except base.py, which already has `Base` and the mixins), `backend/app/models/enums.py`, `backend/alembic/versions/*` (first migration), `backend/app/core/lead_state.py`, `backend/app/core/tenancy.py`, `backend/app/core/crypto.py`, `backend/app/core/refcodes.py`, `frontend/src/lib/types.ts` (enums mirror only), tests.
 
 ~~~text
+Already on main (built by C, Moamen Talaat, as contract-exact stand-ins): models/enums.py, tenants.py, runs.py, icp.py, leads.py, messaging.py, notifications.py,
+core/lead_state.py, core/tenancy.py, core/refcodes.py and migrations 0002-0005. Review them against the contract,
+keep them, and add only what is missing in a NEW migration that revises 0005. Do not recreate existing files.
+
 Read CLAUDE.md and docs/CONTRACTS.md completely first. CONTRACTS.md §2, §3, §4 and §5 define exactly what you build —
 use the exact table names, column names and enum values. If you believe something in the contract is wrong or
 missing, stop and tell me instead of changing it.
@@ -46,6 +63,11 @@ Also add backend/app/models/README.md with an ER summary (a mermaid erDiagram of
 ---
 
 ## P1-2 · Onboarding wizard & business settings — Sat Nov 14 → Wed Nov 18
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - `business_settings` already exists (stand-in model + migration). `onboarding_completed=true` is what unlocks
+>   `POST /icp/generate` (C returns `400 onboarding_incomplete` otherwise).
+
 **Files you own:** `backend/app/api/settings.py`, `backend/app/schemas/settings.py`, `frontend/src/app/(app)/onboarding/*`, `frontend/src/app/(app)/settings/page.tsx` + `settings/business/*` + `settings/agent/*`, `frontend/src/hooks/useSettings.ts`, tests.
 
 ~~~text
@@ -95,9 +117,19 @@ Run poe check and npm run check.
 ---
 
 ## P2-2 · Normalization, dedupe, sourcing orchestration, daily cycle — Thu Nov 19 → Mon Nov 23
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - Ready for you (P2-1 is done): `agents/query_generator.generate_queries(run, icp=, profile=, already_used=)` and
+>   `recent_queries(session, tenant_id)`. `registry.get_search_source().search(...)` returns `PlaceResult`s, and the
+>   Google adapter exposes `last_request_count` for your EXTERNAL_API step. The `search_queries` table exists.
+> - 👉 **Talk to Moamen** to run the P2-1 self-check together (the full sourcing job with his adapter).
+
 **Files you own:** `backend/app/core/phones.py`, `backend/app/services/leads_ingest.py`, `backend/app/workers/jobs/sourcing.py` (orchestration; C provides the query generation + search functions), `backend/app/workers/jobs/daily.py`, `backend/app/api/runs_trigger.py` (POST /runs/sourcing), tests.
 
 ~~~text
+Already on main (built by C, Moamen Talaat, as contract-exact stand-ins): agents/query_generator.py (generate_queries, recent_queries), the Google Places adapter
+and the search_queries table. Call them; do not recreate them.
+
 Read CLAUDE.md, docs/ARCHITECTURE.md §3 and docs/CONTRACTS.md (§3 leads/search_queries, §5 phones, §7 PlaceResult,
 §10 jobs) first. C is building in parallel: app/agents/query_generator.py (generate_queries) and
 app/adapters/search/google_places.py. Code against the contract; use the mock search source until C merges.
@@ -139,10 +171,24 @@ Run poe check.
 ---
 
 ## P3-2 · WhatsApp channel: adapter, webhook, sending, demo routing, settings UI — Tue Nov 24 → Mon Nov 30
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - **Already built:** `services/messaging.py` is a stand-in with *every* §9 signature (plus the helpers
+>   `render_template`, `primary_mobile` and `get_whatsapp_connection`) that **never sends**. Replace its internals with
+>   the real implementation and add `job_send_message`. **Required:** after a successful send, call
+>   `outreach.on_message_sent(session, message)` (C's hook, already on main; it moves QUEUED/LATER → CONTACTED).
+> - **WhatsApp account already set up by Moamen:** test number, permanent system-user token, app secret, verify token
+>   and Graph `v27.0` (in his private `.env`), and the templates `intro` (2 params) + `followup` (1 param), in review.
+> - 👉 **Talk to Moamen** to get the phone number ID, WABA ID and token privately, and to run the P3-3 self-check
+>   together (approve 3 messages and receive them on your phones) once your sending works.
+
 **Critical path:** on **Day 1 of P3**, merge `services/messaging.py` with the contract signatures working against the mock channel, so C (outreach) and D (reply agent) are unblocked. Then build the real adapter.
 **Files you own:** `backend/app/adapters/channels/*`, `backend/app/services/messaging.py`, `backend/app/api/channels.py`, `backend/app/api/webhooks_whatsapp.py`, `backend/app/workers/jobs/messaging.py` (job_send_message + a stub job_handle_inbound that D replaces), `frontend/src/components/channels/*`, `docs/setup-whatsapp.md` (C wrote a first version in P0-3; you extend it), tests.
 
 ~~~text
+Already on main (built by C, Moamen Talaat, as contract-exact stand-ins): services/messaging.py with every §9 signature but no real sending. Replace its internals
+(keep the signatures and helpers), and after a successful send call outreach.on_message_sent(session, message).
+
 Read CLAUDE.md, docs/ARCHITECTURE.md §7 and docs/CONTRACTS.md (§3 channel_connections, message_templates,
 conversations, messages, demo_routes; §7 ChannelAdapter, InboundMessage, StatusUpdate; §9 messaging; §10
 job_send_message / job_handle_inbound; §12 demo routing) first. Use the official WhatsApp Cloud API (Meta Graph API)

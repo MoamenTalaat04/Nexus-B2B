@@ -6,9 +6,20 @@
 ---
 
 ## P0-4 · Authentication + frontend app shell — Wed Nov 11 → Fri Nov 13
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - `backend/app/core/security.py` already has `CurrentUser` + `get_current_user` (reads the `access_token` cookie,
+>   HS256, claims `sub`/`tid`/`role`), because `/runs`, `/icp` and `/outreach` needed it. **Keep these names** and add
+>   hashing, token creation and the cookie helpers. `tenants` + `business_settings` exist (B's stand-ins).
+> - C's `/outreach` page (P3-3 frontend) is **waiting for your shell** (layout, `lib/api.ts`, `useAuth`).
+> - 👉 **Talk to Moamen** about the Approvals badge: he exposes `usePendingApprovals`, and you render it in the sidebar.
+
 **Files you own:** `backend/app/api/auth.py`, `backend/app/core/security.py`, `backend/app/schemas/auth.py`, `frontend/src/app/(auth)/*`, `frontend/src/app/(app)/layout.tsx`, `frontend/src/components/layout/*`, `frontend/src/lib/api.ts`, `frontend/src/hooks/useAuth.ts`, `frontend/src/middleware.ts`, tests.
 
 ~~~text
+Already on main (built by C, Moamen Talaat, as contract-exact stand-ins): core/security.py with CurrentUser + get_current_user. Keep those names and extend the
+file (hashing, token creation, cookies). Do not recreate it.
+
 Read CLAUDE.md and docs/CONTRACTS.md (§1 auth conventions, §3 tenants/users/business_settings, §11 /auth routes)
 first. The repo scaffold (P0-0) is already on main; B is pushing the models at the same time — start with the
 frontend shell and code the backend against the contract; rebase when B merges.
@@ -45,6 +56,14 @@ Run poe check and npm run check. Report the exact register → dashboard flow yo
 ---
 
 ## P1-4 · ICP review/editor UI + the eval harness + ICP eval ⭐ SHOWCASE — Sat Nov 14 → Wed Nov 18
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - The backend is ready: `POST /icp/generate` → `202 {run_id}` (poll `GET /runs/{id}`), `GET /icp/active` (returns
+>   `null` when there is no ICP), `GET /icp/versions` → `{items, total}`, and `PUT /icp/active`. Mock fixtures are in
+>   `tests/fixtures/llm/icp_builder.*.json`, and two **real** Gemini ICPs are in `docs/examples/` for your eval dataset;
+>   `scripts/try_icp.py` shows how to call `build_icp` for real.
+> - 👉 **Talk to Moamen** about the eval harness's use of the LLM wrapper and the cost tracing.
+
 **Why it matters for the discussion:** **evals are the core of agentic engineering.** This harness is reused by scoring (P2-3) and the reply agent (P3-4). In the presentation we show numbers, not vibes.
 **Files you own:** `frontend/src/app/(app)/icp/*`, `frontend/src/components/icp/*`, `backend/evals/*` (harness, README, the icp suite and dataset), tests.
 
@@ -94,6 +113,11 @@ numbers in docs/ai-dev-log.md.
 ---
 
 ## P2-4 · Leads list UI + Agent Activity (traces) ⭐ SHOWCASE — Thu Nov 19 → Mon Nov 23
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - `GET /runs` and `GET /runs/{id}` (the run + its ordered steps with model, tokens, cached tokens, cost and latency)
+>   are on main.
+
 **Works with:** C (C built the runs API and tracing).
 **Why it matters for the discussion:** **observability**. Open any run and see every step the agent took: the queries, the API calls, the LLM calls with tokens and cost, and the decisions. This is how we debug and trust an agent.
 **Files you own:** `backend/app/api/leads.py` (GET /leads list; A adds GET /leads/{id} later), `backend/app/schemas/leads.py`, `frontend/src/app/(app)/leads/page.tsx`, `frontend/src/components/leads/*`, `frontend/src/app/(app)/activity/*`, `frontend/src/components/activity/*`, tests.
@@ -132,11 +156,23 @@ Run poe check and npm run check. Take screenshots of /leads and /activity/[id] w
 ---
 
 ## P3-4 · Reply Agent: classification + tool-using conversation + guardrails ⭐⭐ MAIN SHOWCASE — Tue Nov 24 → Mon Nov 30
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - `llm_tool_loop` already handles **Gemini's thought signatures** (a real run showed that Gemini 3+ rejects the next
+>   turn without them; fixed and tested). `ReplyClassification` is in `schemas/agent_io.py`. `services/notifications.py`
+>   has a minimal `notify_owner` stand-in (inserts the row only); it is your file, so extend it.
+> - Watch item from C's real tests: with tone "formal" the model drifted to Modern Standard Arabic, so keep Egyptian
+>   Arabic explicit in your prompts and evals.
+> - 👉 **Talk to Moamen** if anything about the LLM wrapper is unclear.
+
 **Why it matters for the discussion:** this is the **true agent** in our system. The model reads the lead's reply, decides what to do, and acts through tools, inside guardrails that are **proven by evals** (including prompt-injection attempts). Plan to spend most of the presentation's agent explanation here.
 **Files you own:** `backend/app/agents/reply_classifier.py`, `backend/app/agents/reply_agent.py`, `backend/app/agents/prompts/reply_classifier.md`, `backend/app/agents/prompts/reply_agent.md`, `backend/app/agents/reply_tools.py`, `backend/app/workers/jobs/inbound.py` (replaces B's stub job_handle_inbound), `backend/app/services/notifications.py` (minimal notify_owner; you extend it in P4-2), `backend/evals/suites/reply_*.py`, `backend/evals/datasets/reply_*.jsonl`, tests.
 **Depends on:** B's `services/messaging.py` (Day 1 of P3) and C's `services/autonomy.py`; code against the contract until they merge.
 
 ~~~text
+Already on main (built by C, Moamen Talaat, as contract-exact stand-ins): services/notifications.py with a minimal notify_owner (row only). Extend it; do not
+recreate it. llm_tool_loop already handles Gemini thought signatures.
+
 Read CLAUDE.md, backend/app/agents/README.md, docs/ARCHITECTURE.md (§2, §7) and docs/CONTRACTS.md (§2
 ReplyIntent + the intent→status mapping, §4 transitions, §6 llm_tool_loop/ToolSpec, §8 ReplyClassification,
 §9 messaging/autonomy/notifications/knowledge, §10 job_handle_inbound) first. Call the model only through app.agents.llm
@@ -211,6 +247,11 @@ goes into the presentation.
 ---
 
 ## P4-2 · Escalation, Telegram owner notifications, notifications UI, dashboard — Tue Dec 1 → Fri Dec 4
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - The `notifications` table exists, and C's outreach tick already creates `channel_error` notifications (no approved
+>   template), so include that kind in your UI and Telegram messages.
+
 **Files you own:** `backend/app/services/notifications.py` (extend), `backend/app/adapters/notify/telegram.py`, `backend/app/api/notifications.py`, `backend/app/api/telegram.py` (link + webhook), `backend/app/api/dashboard.py`, `frontend/src/app/(app)/page.tsx` (dashboard), `frontend/src/components/notifications/*`, `frontend/src/components/dashboard/*`, tests.
 
 ~~~text

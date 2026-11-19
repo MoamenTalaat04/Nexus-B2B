@@ -16,6 +16,20 @@ Vitest and the `/api` rewrite, GitHub Actions CI, and the README quickstart.
 ---
 
 ## P0-1 · External accounts, adapter interfaces, mocks & registry — Wed Nov 11 → Fri Nov 13
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - **Already built (stand-ins written exactly to CONTRACTS §7):** `backend/app/adapters/base.py` already contains
+>   *every* model and Protocol from §7, and `adapters/registry.py` has `get_search_source()` (lazy import, and a clear
+>   `NotImplementedError` naming P0-1 while the mock is missing). **Left for you:** the four mocks
+>   (`adapters/*/mock.py`), `get_enrichers` / `get_channel` / `get_notifier`, `adapters/README.md`, the setup docs and tests.
+> - **Day-1 accounts already done by Moamen:** a working Gemini free-tier key (real smoke test passed:
+>   `uv run python -m scripts.llm_smoke`), the Meta app "Nexux B2B" with the WhatsApp **test number**, a permanent
+>   system-user token, app secret, verify token and Graph `v27.0`, and the templates `intro` + `followup` (submitted,
+>   in review). **Still yours:** the Google Places key (it needs a card holder; set a daily quota and a $1 budget alert
+>   to stay inside the free monthly calls. OpenStreetMap was tested and has too few Egyptian shops with phone numbers),
+>   plus `docs/setup-accounts.md` and `docs/setup-whatsapp.md`.
+> - 👉 **Talk to Moamen** before starting, to get the WhatsApp IDs and token privately and agree on the Places key.
+
 **Why it matters for the discussion:** *replaceable adapters* answer the question "how is this different from gluing
 SaaS tools together?". Google, WhatsApp, enrichment and notifications each sit behind an interface, and mocks make the
 whole app runnable offline from Day 1.
@@ -35,6 +49,9 @@ whole app runnable offline from Day 1.
 5. Document everything in `docs/setup-accounts.md` (no secrets).
 
 ~~~text
+Already on main (built by C, Moamen Talaat, as contract-exact stand-ins): adapters/base.py (every §7 model/Protocol) and registry.get_search_source. Keep them;
+add the mocks and the other getters. Do not recreate existing files.
+
 Read CLAUDE.md, docs/ARCHITECTURE.md and docs/CONTRACTS.md (§5 phones helpers, §7 adapters) completely first.
 
 Build the adapter layer that lets every other task call external systems without knowing which implementation
@@ -74,6 +91,12 @@ real, how to add a new provider). Run poe check.
 ---
 
 ## P1-1 · Knowledge upload & extraction — Sat Nov 14 → Mon Nov 16
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - C's ICP job (`app/workers/jobs/icp.py`) already calls `app.services.knowledge.get_knowledge_text(session, tenant_id)`
+>   automatically as soon as your module exists, so **keep the contract signature exactly**.
+> - 👉 **Talk to Moamen** once it is merged; he removes the TODO fallback and re-runs `scripts/try_icp.py` with real files.
+
 **Works with:** C (C's ICP agent consumes your output, so agree on `get_knowledge_text` early).
 **Files you own:** `backend/app/api/knowledge.py`, `backend/app/services/knowledge.py`, `backend/app/schemas/knowledge.py`, `backend/tests/test_knowledge*.py`, `frontend/src/components/knowledge/*`, `frontend/src/hooks/useKnowledge.ts`.
 
@@ -118,6 +141,12 @@ Write a short "Knowledge" section in backend/app/services/README.md. Run poe che
 ---
 
 ## P2-3 · Lead scoring / qualification agent ⭐ SHOWCASE — Thu Nov 19 → Mon Nov 23
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - Ready for you: `LeadScore` / `LeadScoreBatch` are in `app/schemas/agent_io.py`, the `leads` table (stand-in) exists,
+>   and you call the model only through `llm_structured` (see `backend/app/agents/README.md`). The Gemini key works.
+> - 👉 **Talk to Moamen** if anything in the LLM layer or the tracing (`agent_run`, `GET /runs`) is unclear.
+
 **Works with:** D (D built the eval harness in P1-4; use it).
 **Why it matters for the discussion:** this is the "filter like a smart salesperson" step. Show precision/recall numbers from your eval, plus cost per 100 leads (fast model vs. smart model).
 **Files you own:** `backend/app/agents/lead_scorer.py`, `backend/app/agents/prompts/lead_scorer.md`, `backend/app/workers/jobs/scoring.py`, `backend/app/services/insights.py` (stub only), `backend/evals/suites/lead_scoring.py`, `backend/evals/datasets/lead_scoring.jsonl`, tests.
@@ -179,10 +208,19 @@ money) and paste the metrics into your summary and into docs/ai-dev-log.md.
 ---
 
 ## P3-1 · Website enrichment (contact discovery) — Tue Nov 24 → Thu Nov 26
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - The `contacts` table (stand-in) exists. C's outreach tick (P3-3) picks leads whose status is **enriched**: move a
+>   lead QUALIFIED→ENRICHED only through `lead_state.transition(...)` (already on main) and save its mobile as a `MOBILE`
+>   contact (E.164, `is_primary=true`). An enriched lead with no `next_action_at` is contacted on the next tick.
+> - 👉 **Talk to Moamen** before you change how leads become "enriched".
+
 **Works with:** B (you use B's `app/core/phones.py` from P2-2).
 **Files you own:** `backend/app/adapters/enrichment/*`, `backend/app/workers/jobs/enrichment.py`, `backend/app/services/enrichment.py`, tests.
 
 ~~~text
+Already on main (built by C, Moamen Talaat, as contract-exact stand-ins): the contacts table and core/lead_state.transition. Use them; do not recreate them.
+
 Read CLAUDE.md and docs/CONTRACTS.md (§3 contacts/leads, §4 transitions, §5 phones helpers, §7 Enricher,
 §10 job_enrich_leads) first.
 
@@ -224,6 +262,11 @@ Run poe check and summarise the hit-rate on the mock data.
 ---
 
 ## P4-1 · CRM: pipeline board, lead detail, actions, export — Tue Dec 1 → Fri Dec 4
+
+> **⚠️ Update from C (Moamen Talaat), Nov 19: already on `main`, don't redo it:**
+> - `leads`, `contacts`, `lead_status_history` and `messages` already exist (stand-ins); `lead_notes` and
+>   `lead_outcomes` come from B.
+
 **Files you own:** `backend/app/api/leads_actions.py` (PATCH, notes, outcome, contacts, manual message, export; D owns the list endpoint in `api/leads.py`, and you add the detail endpoint `GET /leads/{id}` there in coordination with D), `backend/app/services/crm.py`, `frontend/src/app/(app)/pipeline/*`, `frontend/src/app/(app)/leads/[id]/*`, `frontend/src/components/crm/*`, tests.
 
 ~~~text
