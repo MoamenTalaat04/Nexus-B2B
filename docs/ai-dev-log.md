@@ -145,3 +145,19 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
   `outreach.on_message_sent`. Gemini returned three 503s on the first call; the wrapper retried them.
 - The model dropped the "(تجريبي)" suffix from shop names and named each area in Arabic, within the param rules.
 - Not done yet: replies (needs the webhook tunnel), then "stop" → opted_out.
+
+## P2-1 + P2-2 · joint real sourcing self-check (Nov 20, Moamen Talaat / C)
+- `scripts/try_sourcing.py`: B's `run_sourcing` with C's real query generator (Gemini) and the Google Places
+  adapter (free Maps Demo Key), twice on one demo tenant (ICP from `docs/examples/icp-demo-gemini.json`, 30 new
+  leads max per run).
+- Run 1: 2 queries, 2 Places requests, 30 created, 10 duplicates skipped. Run 2: 4 new queries (recent ones
+  excluded), 4 requests, 30 created, 50 duplicates skipped. SQL after both runs: 60 leads, 56 with a phone,
+  **0 duplicate groups** (same place id / same mobile / same name + city).
+- Findings: (1) 8 of 60 leads are in Giza although every query targeted Cairo: locationBias is a bias, not a
+  filter, so a post-search governorate filter is worth adding. (2) The model generated only Cairo queries in both
+  runs although the ICP also lists Giza; the query generator prompt could spread queries across ICP regions.
+- Follow-up (same day): `GooglePlacesSource.search` now drops places whose own governorate (addressComponents)
+  is known and differs from the requested one; places without it are kept, and dropped places still count toward
+  paging, so no extra Places requests (`last_dropped_count` exposes the number). 3 new tests. Real re-run: a
+  Cairo/Heliopolis "baby shop" search returned 19 kept + 1 dropped; two more Cairo searches had nothing to drop.
+  This time the model also generated a Giza query, so finding (2) above is not consistent either way.
