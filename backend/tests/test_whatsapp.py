@@ -257,8 +257,9 @@ async def test_retries_5xx_and_429_only(adapter: wa.WhatsAppCloudAdapter) -> Non
     bad = respx.post(f"{GRAPH}/{PHONE_ID}/messages").mock(
         return_value=httpx.Response(400, json={"error": {"code": 100, "message": "bad"}})
     )
+    before = len(bad.calls)  # respx reuses the same route for the same URL, so count only the new calls
     await adapter.send_text(to="+201012345678", body="x")
-    assert len(bad.calls) == 1  # a 4xx is final
+    assert len(bad.calls) - before == 1  # a 4xx is final
 
 
 @respx.mock

@@ -59,7 +59,7 @@ class MockChannelAdapter:
     channel = ChannelType.WHATSAPP
     outbox: ClassVar[list[SentRecord]] = []
     fail_next: ClassVar[str | None] = None
-    _ids: ClassVar[itertools.count[int]] = itertools.count(1)
+    _ids: ClassVar["itertools.count[int]"] = itertools.count(1)
 
     def __init__(self, *, phone_number_id: str = "mock-phone-id", access_token: str = "mock-token") -> None:
         self.phone_number_id = phone_number_id

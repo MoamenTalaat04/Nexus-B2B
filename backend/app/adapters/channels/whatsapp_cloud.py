@@ -105,7 +105,7 @@ def map_error(payload: Any, status_code: int | None = None) -> tuple[str, str]:
     message = str(error.get("message") or "WhatsApp API error")
     if details:
         message = f"{message} — {details}"
-    short = ERROR_CODES.get(int(code)) if isinstance(code, int) or str(code).isdigit() else None
+    short = ERROR_CODES.get(int(str(code))) if isinstance(code, int) or str(code).isdigit() else None
     return (short or "provider_error", f"{message} (code {code})")
 
 
@@ -385,7 +385,7 @@ def parse_webhook(payload: dict[str, Any]) -> tuple[list[InboundMessage], list[t
                 if st.get("errors"):
                     first = st["errors"][0] or {}
                     code = first.get("code")
-                    short = ERROR_CODES.get(int(code)) if str(code).isdigit() else None
+                    short = ERROR_CODES.get(int(str(code))) if str(code).isdigit() else None
                     title = first.get("title") or first.get("message") or "failed"
                     error = f"{short or 'provider_error'}: {title} (code {code})"
                 statuses.append(
