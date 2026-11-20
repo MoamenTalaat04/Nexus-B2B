@@ -89,3 +89,49 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
 - `try_places.py "kids clothing shop" --governorate Cairo`: 20 shops, 18 with a phone, 1 request (Our Kids, Ninos Kids branches, junior, Child Mall, Lovely Stores, pink and blue, Cotton House, Bambi Kids Wear, Rashdan, Karas Kids, …).
 - Overall 37/40 (93%) have a phone number — versus 1/21 on OpenStreetMap around Nasr City.
 - For the next steps: location bias is not a filter (a Cairo search returns some Giza shops, correctly labelled Giza); wholesalers appear (e.g. «مكتب المالكى للملابس جمله وقطاعى») — A's scoring should disqualify them per the ICP; chains appear as several branches — B's dedupe; phones come in local format (010…) — B normalizes to E.164; cities come in Arabic.
+
+### P0-2 · P1-2 · P2-2 · P3-2 · P4-4 — Member B backend (one session, branch `Task-B`) — Member B (Claude, Opus 5.5) — 2026-11-20
+- Sessions / approx. time: one long session for all five backend tasks, on branch `Task-B` off `main` (e50acac).
+  The session's sandbox had **no network for package installs**, so FastAPI/SQLAlchemy/pytest were not
+  available: code was checked with `ruff check` + `ruff format --check` and `py_compile` only. **`uv run poe check`
+  (mypy + pytest) has not run yet — run it before merging.**
+- P0-2: kept C's stand-ins (they match §3) and added `users`, `lead_notes`, `lead_outcomes`, `demo_routes`,
+  `learned_insights` in migration `0006` (revises `0005`, hand-written in the autogenerate style); `core/crypto.py`
+  (Fernet, clear errors for a missing/invalid key), `tenancy.scoped()`, `scripts/export_enums.py` (deterministic,
+  `--out` / `--check`; D commits `frontend/src/lib/types.ts`), `models/README.md` with the ER diagram; tests for
+  every transition pair, crypto, constraints and an upgrade → downgrade → upgrade migration run.
+- P1-2: `GET/PUT /settings` (partial update; only an owner can write), `GET /settings/geo` (27 governorates, cities
+  for the 7 main ones, names aligned with C's `geo_eg_coords.py`). Cross-field checks after merging with the
+  stored row (quiet hours, onboarding completeness). Handoff for D: `docs/api/member-B-endpoints.md`.
+- P2-2: `core/phones.py`; `services/leads_ingest.py` (priority dedupe key + "same mobile on another lead"
+  check; one preload + one bulk `INSERT … ON CONFLICT DO NOTHING`, query count asserted ≤ 4); `job_run_sourcing`
+  (one failing search = an ERROR step, not a failed run), `job_daily_cycle` (09:00 Cairo, working days only,
+  arq `_job_id` per tenant/day), `POST /runs/sourcing` (409/400/503). `leads.raw` stores the whole PlaceResult plus
+  `phone_e164`, so enrichment can create the contact without calling Google again.
+- P3-2: `adapters/channels/whatsapp_cloud.py` (Graph API send/check/templates, Meta error codes → short codes,
+  retries only on 429/5xx, param sanitising, webhook signature + parser), `adapters/channels/mock.py`,
+  `registry.get_channel/build_channel/ChannelNotConnected`, the real `services/messaging.py` (guardrails at send
+  time, LRU demo routing that writes `demo_routes`, `#REFCODE` lead-initiated chats, STOP words → OPTED_OUT
+  first, status ordering), `job_send_message` + stub `job_handle_inbound` + a sweeper cron, the channels API and the
+  webhook, `docs/setup-whatsapp.md` (written new; there was no first version on main).
+- P4-4: `services/insights.py` (stats per segment in code), `agents/feedback.py` + `prompts/feedback.md`
+  (`feedback@1`, SMART/medium, untrusted `<examples>` without phones), `job_feedback`, `/insights` API,
+  `scripts/seed_demo.py` (idempotent, `--reset`), `tests/e2e/test_full_cycle.py`, `docs/DEMO-SCRIPT.md`.
+- Decisions to review with the team (no contract file was edited):
+  1. Unknown-sender notifications use kind `channel_error` (the §3 CHECK has no better kind).
+  2. Quiet hours at send time keep the message queued and re-enqueue it for the next window, but do **not** touch
+     `lead.next_action_at` (the prompt asked for it) — C's outreach engine uses that column for the sequence, and
+     overwriting it would move the follow-up.
+  3. Additive route `PUT /channels/whatsapp/templates/{id}` so the owner can tag a template intro/followup.
+  4. `resolve_demo_target(settings, lead_id, routes=None)`: C's assisted wa.me code calls it synchronously, so
+     without routes it stays the stable per-lead pick; `route_demo()` is the async LRU version that writes
+     `demo_routes` (used by `send_message` and `mark_sent_manually`).
+  5. `registry.py` belongs to P0-1, but P3-2 needed `get_channel`; only that part was added.
+- What is still missing / depends on others: the mock search source (`adapters/search/mock.py`, P0-1) — until it
+  lands, `USE_MOCK_ADAPTERS=true` sourcing raises NotImplementedError (tests use a fake source); A must call
+  `insights.on_outcome_recorded(session, tenant_id)` after committing an outcome in `POST /leads/{id}/outcome`
+  (P4-1) and read `get_active_insights` in the scorer (P2-3); the e2e test uses marked stand-ins for P0-4, P1-1,
+  P2-3, P3-1, P3-4 and P4-1; `knowledge_files` is P1-1's table, so the seed writes the profile file to
+  `UPLOAD_DIR` and inserts the row only when that model exists.
+- Would I do it differently next time? Get a working `uv sync` first: five tasks of code without one pytest run is
+  the biggest risk in this branch.
