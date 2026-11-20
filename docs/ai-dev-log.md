@@ -135,3 +135,13 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
   `UPLOAD_DIR` and inserts the row only when that model exists.
 - Would I do it differently next time? Get a working `uv sync` first: five tasks of code without one pytest run is
   the biggest risk in this branch.
+
+## P3-3 · real WhatsApp send self-check (Nov 20, Moamen Talaat / C)
+- After merging Task-B (B's real messaging, P3-2), ran `scripts/try_outreach_send.py` against the real Cloud API:
+  demo tenant, ICP from `docs/examples/icp-demo-gemini.json`, templates synced from Meta (`intro` / `followup`
+  approved, purposes tagged automatically), 3 fictional enriched leads, outreach tick with real Gemini personalization
+  (`approve_first_touch` → 3 pending), approve, send.
+- Result: 3/3 `sent`, all redirected to the team test phone (demo mode), leads ENRICHED → QUEUED → CONTACTED through
+  `outreach.on_message_sent`. Gemini returned three 503s on the first call; the wrapper retried them.
+- The model dropped the "(تجريبي)" suffix from shop names and named each area in Arabic, within the param rules.
+- Not done yet: replies (needs the webhook tunnel), then "stop" → opted_out.
