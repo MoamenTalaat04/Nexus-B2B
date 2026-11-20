@@ -1,7 +1,7 @@
 """Messaging tables (CONTRACTS section 3).
 
 Stand-in written in P3-3 before P0-2 landed: channel_connections, message_templates, conversations and
-messages, column by column from the contract. P0-2 owns this file and adds demo_routes here.
+messages, column by column from the contract. P0-2 owns this file and added demo_routes (migration 0006).
 """
 
 import uuid
@@ -111,4 +111,21 @@ class Message(UUIDPkMixin, TimestampMixin, TenantMixin, Base):
     redirected_to: Mapped[str | None] = mapped_column(Text, nullable=True)
     agent_run_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class DemoRoute(UUIDPkMixin, TimestampMixin, TenantMixin, Base):
+    """Demo mode (CONTRACTS section 12): which lead a whitelisted test phone currently stands in for.
+
+    `updated_at` doubles as "last used", so the least recently used phone is picked for a new lead.
+    """
+
+    __tablename__ = "demo_routes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "test_phone", name="uq_demo_routes_tenant_id_test_phone"),
+    )
+
+    test_phone: Mapped[str] = mapped_column(Text, nullable=False)  # E.164
+    lead_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("leads.id", ondelete="CASCADE"), nullable=False
     )

@@ -1,15 +1,15 @@
 """SQLAlchemy models. Import every model module here so Alembic autogenerate sees it.
 
-P0-2 adds the domain models (one file per area) and imports them below.
+One file per area (P0-2); see app/models/README.md for the ER diagram.
 """
 
 from app.models.base import Base, TenantMixin, TimestampMixin, UUIDPkMixin
 from app.models.icp import IcpVersion
-from app.models.leads import Contact, Lead, LeadStatusHistory, SearchQuery
-from app.models.messaging import ChannelConnection, Conversation, Message, MessageTemplate
-from app.models.notifications import Notification
+from app.models.leads import Contact, Lead, LeadNote, LeadOutcome, LeadStatusHistory, SearchQuery
+from app.models.messaging import ChannelConnection, Conversation, DemoRoute, Message, MessageTemplate
+from app.models.notifications import LearnedInsight, Notification
 from app.models.runs import AgentRun, AgentStep
-from app.models.tenants import BusinessSettings, Tenant
+from app.models.tenants import BusinessSettings, Tenant, User
 
 __all__ = [
     "AgentRun",
@@ -19,9 +19,13 @@ __all__ = [
     "ChannelConnection",
     "Contact",
     "Conversation",
+    "DemoRoute",
     "IcpVersion",
     "Lead",
+    "LeadNote",
+    "LeadOutcome",
     "LeadStatusHistory",
+    "LearnedInsight",
     "Message",
     "MessageTemplate",
     "Notification",
@@ -30,4 +34,5 @@ __all__ = [
     "TenantMixin",
     "TimestampMixin",
     "UUIDPkMixin",
+    "User",
 ]

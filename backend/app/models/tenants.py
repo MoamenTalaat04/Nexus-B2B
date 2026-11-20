@@ -2,18 +2,18 @@
 
 Stand-in written in P0-3/P1-3, before P0-2 landed: `tenants` (needed by the run tables) and
 `business_settings` (needed by the ICP builder), column by column from the contract.
-P0-2 owns this file and adds `users` here.
+P0-2 owns this file and added `users` (migration 0006).
 """
 
 import uuid
 from datetime import time
 from typing import Any
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Text, Time, text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Text, Time, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, TimestampMixin, UUIDPkMixin
+from app.models.base import Base, TenantMixin, TimestampMixin, UUIDPkMixin
 from app.models.enums import AutonomyMode, FirstTouchMode, enum_check
 
 DEFAULT_SEQUENCE_STEPS_SQL = (
@@ -26,6 +26,24 @@ class Tenant(UUIDPkMixin, TimestampMixin, Base):
     __tablename__ = "tenants"
 
     name: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+USER_ROLES = ("owner", "member")
+
+
+class User(UUIDPkMixin, TimestampMixin, TenantMixin, Base):
+    """A login. `email` is globally unique and always stored lowercase; `password_hash` is argon2 (P0-4)."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        enum_check("role", USER_ROLES),
+        CheckConstraint("email = lower(email)", name="email_lowercase"),
+    )
+
+    email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    full_name: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    role: Mapped[str] = mapped_column(Text, nullable=False, server_default="owner")
 
 
 class BusinessSettings(UUIDPkMixin, TimestampMixin, Base):
