@@ -25,10 +25,10 @@ Vitest and the `/api` rewrite, GitHub Actions CI, and the README quickstart.
 > - **Day-1 accounts already done by Moamen:** a working Gemini free-tier key (real smoke test passed:
 >   `uv run python -m scripts.llm_smoke`), the Meta app "Nexux B2B" with the WhatsApp **test number**, a permanent
 >   system-user token, app secret, verify token and Graph `v27.0`, and the templates `intro` + `followup` (submitted,
->   in review). **Still yours:** the Google Places key (it needs a card holder; set a daily quota and a $1 budget alert
->   to stay inside the free monthly calls. OpenStreetMap was tested and has too few Egyptian shops with phone numbers),
->   plus `docs/setup-accounts.md` and `docs/setup-whatsapp.md`.
-> - 👉 **Talk to Moamen** before starting, to get the WhatsApp IDs and token privately and agree on the Places key.
+>   in review), and a **free Google Maps Demo Key** for Places (no billing, no charges; real searches return phones for
+>   93% of Cairo kids shops; OpenStreetMap had too few). **Still yours:** `docs/setup-accounts.md` and
+>   `docs/setup-whatsapp.md` (each teammate can create their own free Maps Demo Key in the Google Cloud console).
+> - 👉 **Talk to Moamen** before starting, to get the WhatsApp IDs and token privately.
 
 **Why it matters for the discussion:** *replaceable adapters* answer the question "how is this different from gluing
 SaaS tools together?". Google, WhatsApp, enrichment and notifications each sit behind an interface, and mocks make the

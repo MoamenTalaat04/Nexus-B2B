@@ -27,6 +27,15 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
 
 ## Entries
 
+### P0-1 — External accounts, adapters & mocks — Member A — 2026-11-20
+- Sessions / approx. time: 1 session, implementation and focused adapter tests.
+- Plan-mode corrections: preserved existing stand-in and P3-2 implementations for `base.py`, `registry.py`, Google Places and the WhatsApp mock. Added only the missing search/enrichment/notifier mocks and registry getters.
+- What the agent did well: kept provider access behind the registry, made search/enrichment/notifier mocks deterministic, and added focused validation/tests without modifying frontend files.
+- What it got wrong and how it was caught: the first search mock draft used incorrectly sized generated phone strings; corrected it to E.164-style +20 10/11/12/15 numbers with eight-digit suffixes.
+- Manual/account status: `docs/setup-accounts.md` documents provider setup without secrets. The WhatsApp IDs and permanent token remain a private coordination item with Member C/Moamen.
+- Open items: create the Google key and submit/verify the WhatsApp templates; run a real-account smoke test only after credentials are available.
+- Would I do it differently next time? Keep account setup and secret-sharing in a private channel while maintaining contract-only documentation in the repository.
+
 ### P0-0 — Repo scaffold, tooling, CI — Claude (Claude Code, Opus 5.5) — 2026-11-11
 - Sessions / approx. time: 1 session, about 1 hour including toolchain setup on a fresh Windows machine.
 - Plan-mode corrections: the repo's first README proposed a different stack (NestJS, Prisma, BullMQ, Vite). The human chose to keep the planned stack (FastAPI, Next.js, WhatsApp first), and the README was rewritten to match.
@@ -82,3 +91,145 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
 - `scripts/try_icp.py --business medical`: a fictional medical-supplies *distributor* in Alexandria selling to clinics, English + Arabic notes, tone "formal", and deliberately no prices or minimum orders.
 - Result (`docs/examples/icp-demo-gemini-medical.json`): no invented facts — every price/min order stayed null and the automatic "numbers not in the inputs" check found none; FAQs only from stated facts; competitors (other distributors) and equipment companies excluded per the owner's "consumables only"; regions kept to Smouha/Mansheya; Maps phrasings in Arabic + English, place types dentist/doctor. 2 calls, ≈ $0.015 at paid prices.
 - Watch item: with tone "formal" the model wrote Modern Standard Arabic, not Egyptian Arabic. Fine inside the ICP, but outreach and replies must stay Egyptian Arabic (CLAUDE.md) — keep that explicit in the personalizer and reply-agent prompts and in D's reply eval.
+
+### P2-1 self-check: real Google Places results (free Maps Demo Key) — Member C — 2026-11-19
+- Key: Google Maps Platform **Maps Demo Key** (free, no billing; supports Places API (New); daily limits only pause usage, never charge; meant for testing/prototyping, which fits the demo). It returns the Enterprise fields we need (phones, website, rating).
+- `try_places.py "محل ملابس اطفال" --governorate Cairo --city "Nasr City"`: 20 shops, 19 with a phone, 1 request. Names: روز كيدز - عباس العقاد (Rose Kids), Ninos Kids — Abbas El-Akkad, Pinky Lollypop, جونيور, Child Mall, Aya kids, لفلي, تو إس لملابس البيت, بيبى لاند, ضجة, Kidzvilla, Kids Park store, Junior, Our Kids, كلارك كيدز, صن بيبي, Alsayad Kids, Pinky, Our Kids (Dokki), ريم ورحاب لتجهيزات البيبي.
+- `try_places.py "kids clothing shop" --governorate Cairo`: 20 shops, 18 with a phone, 1 request (Our Kids, Ninos Kids branches, junior, Child Mall, Lovely Stores, pink and blue, Cotton House, Bambi Kids Wear, Rashdan, Karas Kids, …).
+- Overall 37/40 (93%) have a phone number — versus 1/21 on OpenStreetMap around Nasr City.
+- For the next steps: location bias is not a filter (a Cairo search returns some Giza shops, correctly labelled Giza); wholesalers appear (e.g. «مكتب المالكى للملابس جمله وقطاعى») — A's scoring should disqualify them per the ICP; chains appear as several branches — B's dedupe; phones come in local format (010…) — B normalizes to E.164; cities come in Arabic.
+
+### P0-2 · P1-2 · P2-2 · P3-2 · P4-4 — Member B backend (one session, branch `Task-B`) — Member B (Claude, Opus 5.5) — 2026-11-20
+- Sessions / approx. time: one long session for all five backend tasks, on branch `Task-B` off `main` (e50acac).
+  The session's sandbox had **no network for package installs**, so FastAPI/SQLAlchemy/pytest were not
+  available: code was checked with `ruff check` + `ruff format --check` and `py_compile` only. **`uv run poe check`
+  (mypy + pytest) has not run yet — run it before merging.**
+- P0-2: kept C's stand-ins (they match §3) and added `users`, `lead_notes`, `lead_outcomes`, `demo_routes`,
+  `learned_insights` in migration `0006` (revises `0005`, hand-written in the autogenerate style); `core/crypto.py`
+  (Fernet, clear errors for a missing/invalid key), `tenancy.scoped()`, `scripts/export_enums.py` (deterministic,
+  `--out` / `--check`; D commits `frontend/src/lib/types.ts`), `models/README.md` with the ER diagram; tests for
+  every transition pair, crypto, constraints and an upgrade → downgrade → upgrade migration run.
+- P1-2: `GET/PUT /settings` (partial update; only an owner can write), `GET /settings/geo` (27 governorates, cities
+  for the 7 main ones, names aligned with C's `geo_eg_coords.py`). Cross-field checks after merging with the
+  stored row (quiet hours, onboarding completeness). Handoff for D: `docs/api/member-B-endpoints.md`.
+- P2-2: `core/phones.py`; `services/leads_ingest.py` (priority dedupe key + "same mobile on another lead"
+  check; one preload + one bulk `INSERT … ON CONFLICT DO NOTHING`, query count asserted ≤ 4); `job_run_sourcing`
+  (one failing search = an ERROR step, not a failed run), `job_daily_cycle` (09:00 Cairo, working days only,
+  arq `_job_id` per tenant/day), `POST /runs/sourcing` (409/400/503). `leads.raw` stores the whole PlaceResult plus
+  `phone_e164`, so enrichment can create the contact without calling Google again.
+- P3-2: `adapters/channels/whatsapp_cloud.py` (Graph API send/check/templates, Meta error codes → short codes,
+  retries only on 429/5xx, param sanitising, webhook signature + parser), `adapters/channels/mock.py`,
+  `registry.get_channel/build_channel/ChannelNotConnected`, the real `services/messaging.py` (guardrails at send
+  time, LRU demo routing that writes `demo_routes`, `#REFCODE` lead-initiated chats, STOP words → OPTED_OUT
+  first, status ordering), `job_send_message` + stub `job_handle_inbound` + a sweeper cron, the channels API and the
+  webhook, `docs/setup-whatsapp.md` (written new; there was no first version on main).
+- P4-4: `services/insights.py` (stats per segment in code), `agents/feedback.py` + `prompts/feedback.md`
+  (`feedback@1`, SMART/medium, untrusted `<examples>` without phones), `job_feedback`, `/insights` API,
+  `scripts/seed_demo.py` (idempotent, `--reset`), `tests/e2e/test_full_cycle.py`, `docs/DEMO-SCRIPT.md`.
+- Decisions to review with the team (no contract file was edited):
+  1. Unknown-sender notifications use kind `channel_error` (the §3 CHECK has no better kind).
+  2. Quiet hours at send time keep the message queued and re-enqueue it for the next window, but do **not** touch
+     `lead.next_action_at` (the prompt asked for it) — C's outreach engine uses that column for the sequence, and
+     overwriting it would move the follow-up.
+  3. Additive route `PUT /channels/whatsapp/templates/{id}` so the owner can tag a template intro/followup.
+  4. `resolve_demo_target(settings, lead_id, routes=None)`: C's assisted wa.me code calls it synchronously, so
+     without routes it stays the stable per-lead pick; `route_demo()` is the async LRU version that writes
+     `demo_routes` (used by `send_message` and `mark_sent_manually`).
+  5. `registry.py` belongs to P0-1, but P3-2 needed `get_channel`; only that part was added.
+- What is still missing / depends on others: the mock search source (`adapters/search/mock.py`, P0-1) — until it
+  lands, `USE_MOCK_ADAPTERS=true` sourcing raises NotImplementedError (tests use a fake source); A must call
+  `insights.on_outcome_recorded(session, tenant_id)` after committing an outcome in `POST /leads/{id}/outcome`
+  (P4-1) and read `get_active_insights` in the scorer (P2-3); the e2e test uses marked stand-ins for P0-4, P1-1,
+  P2-3, P3-1, P3-4 and P4-1; `knowledge_files` is P1-1's table, so the seed writes the profile file to
+  `UPLOAD_DIR` and inserts the row only when that model exists.
+- Would I do it differently next time? Get a working `uv sync` first: five tasks of code without one pytest run is
+  the biggest risk in this branch.
+
+## P3-3 · real WhatsApp send self-check (Nov 20, Moamen Talaat / C)
+- After merging Task-B (B's real messaging, P3-2), ran `scripts/try_outreach_send.py` against the real Cloud API:
+  demo tenant, ICP from `docs/examples/icp-demo-gemini.json`, templates synced from Meta (`intro` / `followup`
+  approved, purposes tagged automatically), 3 fictional enriched leads, outreach tick with real Gemini personalization
+  (`approve_first_touch` → 3 pending), approve, send.
+- Result: 3/3 `sent`, all redirected to the team test phone (demo mode), leads ENRICHED → QUEUED → CONTACTED through
+  `outreach.on_message_sent`. Gemini returned three 503s on the first call; the wrapper retried them.
+- The model dropped the "(تجريبي)" suffix from shop names and named each area in Arabic, within the param rules.
+- Not done yet: replies (needs the webhook tunnel), then "stop" → opted_out.
+
+## P2-1 + P2-2 · joint real sourcing self-check (Nov 20, Moamen Talaat / C)
+- `scripts/try_sourcing.py`: B's `run_sourcing` with C's real query generator (Gemini) and the Google Places
+  adapter (free Maps Demo Key), twice on one demo tenant (ICP from `docs/examples/icp-demo-gemini.json`, 30 new
+  leads max per run).
+- Run 1: 2 queries, 2 Places requests, 30 created, 10 duplicates skipped. Run 2: 4 new queries (recent ones
+  excluded), 4 requests, 30 created, 50 duplicates skipped. SQL after both runs: 60 leads, 56 with a phone,
+  **0 duplicate groups** (same place id / same mobile / same name + city).
+- Findings: (1) 8 of 60 leads are in Giza although every query targeted Cairo: locationBias is a bias, not a
+  filter, so a post-search governorate filter is worth adding. (2) The model generated only Cairo queries in both
+  runs although the ICP also lists Giza; the query generator prompt could spread queries across ICP regions.
+- Follow-up (same day): `GooglePlacesSource.search` now drops places whose own governorate (addressComponents)
+  is known and differs from the requested one; places without it are kept, and dropped places still count toward
+  paging, so no extra Places requests (`last_dropped_count` exposes the number). 3 new tests. Real re-run: a
+  Cairo/Heliopolis "baby shop" search returned 19 kept + 1 dropped; two more Cairo searches had nothing to drop.
+  This time the model also generated a Giza query, so finding (2) above is not consistent either way.
+
+### P1-1 fix — missing `knowledge_files` table — Moamen Talaat (B + C) — 2026-11-21
+- A's P1-1 push (63dfc87) used `app.models.knowledge.KnowledgeFile`, but neither the model nor a migration existed, so
+  every `/knowledge` call returned 500 and C's ICP build crashed (`ModuleNotFoundError`); A's tests faked the table.
+- Added `app/models/knowledge.py` and migration `0007` exactly as CONTRACTS §3 (status CHECK processing|ready|failed,
+  tenant FK + index, tenant/created_at index). P1-3: removed the ICP job's "knowledge not on main yet" fallback; it now
+  calls `services/knowledge.get_knowledge_text` directly, with a test over real rows (only `ready` files are used).
+- Updated A's stale registry test: in real mode `get_enrichers()` now returns A's two P3-1 enrichers.
+- `poe check`: 676 passed. Not done: a manual upload of a real Arabic PDF through `POST /knowledge` (A's self-check).
+- Real chain self-check (`scripts/try_chain.py`; real Gemini + Places + public websites, demo tenant, nothing sent):
+  B sourcing 10 leads (1 Places request) → A scoring 9 qualified / 1 disqualified (a shoe store) with sensible
+  reasons → A enrichment 7 enriched (7 primary mobiles) / 2 no_contact → C outreach tick 7 first touches pending
+  approval. Hand-offs (job_score_leads run_id, job_enrich_leads lead_ids) are correct.
+- Found in A's P3-1 (not fixed here, A's files): `run_enrich_leads` runs `enrich_lead` concurrently on ONE
+  AsyncSession; the first run failed 1 of 9 leads with "Session is already flushing" (intermittent; the second run
+  passed). Fix: serialize the DB part (a lock around reads/writes) or give each lead its own session.
+
+### P3-1 fix — enrichment session race — Moamen Talaat (B + C) — 2026-11-21
+- Fixed the race noted above: `enrich_lead(..., db_lock=...)` guards its DB reads/writes with a lock shared by
+  `run_enrich_leads` (also used for `next_action_at`); the enrichers (website crawling) still run up to 5 leads in
+  parallel. New `tests/test_enrichment_concurrency.py` enriches 12 leads on one real session: it fails 3/3 without
+  the lock and passes with it (A's existing tests used fake sessions, so they could not catch it).
+- `poe check`: 677 passed. Real chain re-run: 9 enriched-or-no_contact, 0 failed, 7 first touches pending approval.
+
+### Missing A/B/C backend work — Moamen Talaat (owns B + C; A's items done with the team's OK) — 2026-11-21
+- **P4-3 (C) reports backend:** `services/reports.py` + `api/reports.py` — `/reports/summary` (KPIs + previous
+  period + deltas + definitions), `/funnel`, `/segments?by=`, `/costs`, `/timeseries?metric=`. Pure SQL aggregates,
+  tenant-scoped, Cairo day boundaries, default last 30 days. `tests/test_reports.py` asserts every metric exactly
+  (medians, deltas, isolation, empty range, validation). Self-check: reply rate 0.725 and cost per qualified lead
+  $0.0099 on the demo seed match a hand-written SQL query.
+- **P4-1 (A) CRM backend:** `services/crm.py` + `api/leads_actions.py` — GET/PATCH `/leads/{id}`, notes, outcome
+  (WON/LOST + pause + `insights.on_outcome_recorded`), manual contacts (E.164; mobile unblocks no_contact), manual
+  message (409 `window_closed`), `/leads/export.xlsx` (Arabic, frozen header, list filters). Opted-out leads cannot be
+  moved or messaged. `tests/test_crm.py` (6 tests). The list + `/leads/stats` stay P2-4 (D).
+- **P2-3 (A) eval:** D's harness (P1-4) is not on main, so `scripts/eval_lead_scoring.py` runs A's suite (batches of
+  15, 3 calls). gemini-3.5-flash-lite: precision 1.000, recall 0.739, injection case not_fit (PASS), 0 unscored,
+  ≈ $0.025 per 100 leads (estimated). Misses: 5 "partial" leads scored 5 (A's summary counts partial as qualified)
+  and one wholesale shop scored not_fit. Not done: `--tier smart` (the scorer hard-codes FAST).
+- **P1-1 (A) self-check:** real API upload of Arabic .md and .docx → ready with readable previews; .exe → 415;
+  `get_knowledge_text` and an Arabic `search_knowledge` hit the right paragraph; delete works. The demo seed now
+  stores its knowledge file as a real `knowledge_files` row.
+- **P3-2 (B) self-check:** connecting WhatsApp with an invalid token (real Graph call) → channel `status=error`,
+  `last_error="invalid_token: … (code 190)"`, no token echoed. **P4-4 (B):** `poe seed-demo --reset` + an API walk
+  of DEMO-SCRIPT (settings, ICP, knowledge, runs, queues, insights, all reports, lead detail, export) → all 200.
+- Docs for D: `docs/api/reports-and-crm-endpoints.md`. `poe check`: 686 passed.
+- Still open: the WhatsApp reply test (needs cloudflared + the Meta webhook set in the dashboard by the owner);
+  `frontend/src/lib/types.ts` (frontend, waits for D).
+
+### P3-2 + P3-3 real WhatsApp reply test — Moamen Talaat (B + C) — 2026-11-21
+- Setup: API with real adapters behind a cloudflared quick tunnel; Meta webhook → `/api/v1/webhooks/whatsapp`
+  (verify handshake 200; wrong token 403), field `messages` subscribed.
+- **Gotcha found:** Meta verified the webhook but sent no message events: the app was not subscribed to the WABA
+  (only Meta's "WA DevX Webhook Events" app was). Fixed with `POST /<WABA_ID>/subscribed_apps` (token from .env);
+  messages sent before that are not re-delivered. Added to the setup checklist below.
+- Result on the demo tenant (phone routed to «عالم الصغار (تجريبي)» via demo_routes): reply «ممكن الاسعار» stored
+  as inbound, 24h window opened, lead contacted → replied; then "STOP" → replied → opted_out ("the lead asked to
+  stop", actor system), next_action_at cleared. An agent follow-up and an owner manual message to that lead were both
+  refused (`blocked: opted_out` / 409 `opted_out`). Other demo leads untouched.
+- Not covered: the automatic answer to a reply (P3-4 reply agent, D) — `job_handle_inbound` is enqueued but has no
+  handler on main yet.
+- Setup checklist for the next run: (1) cloudflared tunnel → set the callback URL in Meta (it changes every run);
+  (2) the app must be in `GET /<WABA_ID>/subscribed_apps`; (3) field `messages` subscribed; (4) run the API with
+  `USE_MOCK_ADAPTERS=false`.

@@ -3,7 +3,6 @@
 POST /api/v1/icp/generate pre-creates the run (status queued) and enqueues this job with its run_id.
 """
 
-import importlib
 import logging
 import uuid
 from typing import Any
@@ -17,6 +16,7 @@ from app.core.tracing import agent_run
 from app.db import SessionLocal
 from app.models.enums import AgentRunKind, StepType
 from app.services import icp_service
+from app.services import knowledge as knowledge_service
 
 logger = logging.getLogger("app.jobs.icp")
 
@@ -26,14 +26,8 @@ class IcpBuildError(Exception):
 
 
 async def load_knowledge_text(session: AsyncSession, tenant_id: uuid.UUID) -> str:
-    """A's knowledge service (P1-1), or "" until it is merged."""
-    try:
-        knowledge = importlib.import_module("app.services.knowledge")
-    except ModuleNotFoundError:  # TODO(P1-1): remove this fallback once services/knowledge.py is on main
-        logger.warning("app.services.knowledge is not available yet; building the ICP without files")
-        return ""
-    text: str = await knowledge.get_knowledge_text(session, tenant_id)
-    return text
+    """The tenant's ready knowledge files as one text (A's P1-1 service); "" when there are none."""
+    return await knowledge_service.get_knowledge_text(session, tenant_id)
 
 
 async def run_icp_build(

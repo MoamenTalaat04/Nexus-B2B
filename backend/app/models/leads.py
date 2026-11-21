@@ -1,11 +1,13 @@
 """Lead tables (CONTRACTS section 3).
 
 Stand-in written in P2-1/P3-3 before P0-2 landed: search_queries, leads, contacts and lead_status_history,
-column by column from the contract. P0-2 owns this file and adds lead_notes and lead_outcomes here.
+column by column from the contract. P0-2 owns this file and added lead_notes and lead_outcomes
+(migration 0006).
 """
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
@@ -15,6 +17,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     Text,
     UniqueConstraint,
     text,
@@ -28,6 +31,7 @@ from app.models.enums import ContactType, LeadStatus, enum_check
 
 CONTACT_SOURCES = ("google_places", "website", "manual", "lead_initiated")
 ACTORS = ("agent", "user", "system")
+OUTCOMES = ("won", "lost")
 
 
 class SearchQuery(UUIDPkMixin, TimestampMixin, TenantMixin, Base):
@@ -124,3 +128,34 @@ class LeadStatusHistory(UUIDPkMixin, TimestampMixin, TenantMixin, Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     actor: Mapped[str] = mapped_column(Text, nullable=False)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class LeadNote(UUIDPkMixin, TimestampMixin, TenantMixin, Base):
+    __tablename__ = "lead_notes"
+    __table_args__ = (Index("ix_lead_notes_lead_id", "lead_id"),)
+
+    lead_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("leads.id", ondelete="CASCADE"), nullable=False
+    )
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class LeadOutcome(UUIDPkMixin, TimestampMixin, TenantMixin, Base):
+    """Won/lost result set by the owner; the input of the feedback loop (P4-4)."""
+
+    __tablename__ = "lead_outcomes"
+    __table_args__ = (
+        enum_check("outcome", OUTCOMES),
+        Index("ix_lead_outcomes_lead_id", "lead_id"),
+        Index("ix_lead_outcomes_tenant_id_created_at", "tenant_id", "created_at"),
+    )
+
+    lead_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("leads.id", ondelete="CASCADE"), nullable=False
+    )
+    outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    value_egp: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)

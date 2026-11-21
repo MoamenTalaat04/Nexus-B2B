@@ -1,7 +1,5 @@
 """P1-3: ICP builder agent, icp_service, job_build_icp and the /icp API (mock LLM, no network)."""
 
-import sys
-import types
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -19,6 +17,7 @@ from app.agents.llm import LLMRefused
 from app.config import settings as app_settings
 from app.models.enums import AgentRunStatus
 from app.models.icp import IcpVersion
+from app.models.knowledge import KnowledgeFile
 from app.models.runs import AgentRun, AgentStep
 from app.models.tenants import BusinessSettings, Tenant
 from app.schemas.agent_io import ICP, CompanyProfile, RegionTarget
@@ -77,16 +76,14 @@ async def tenant(session: AsyncSession) -> Tenant:
 
 @pytest.fixture
 def knowledge(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A stand-in for A's app.services.knowledge (P1-1)."""
-    module = types.ModuleType("app.services.knowledge")
+    """Fixed knowledge text instead of uploaded files (A's service has its own tests)."""
 
     async def get_knowledge_text(
         session: AsyncSession, tenant_id: uuid.UUID, max_chars: int = 120_000
     ) -> str:
         return KNOWLEDGE
 
-    module.get_knowledge_text = get_knowledge_text  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "app.services.knowledge", module)
+    monkeypatch.setattr(icp_job.knowledge_service, "get_knowledge_text", get_knowledge_text)
 
 
 async def steps_of(session: AsyncSession, run_id: uuid.UUID) -> list[AgentStep]:
@@ -150,12 +147,27 @@ async def test_rebuilding_creates_version_2_and_deactivates_1(session: AsyncSess
     assert [(r.version, r.is_active) for r in rows] == [(2, True), (1, False)]
 
 
-async def test_knowledge_service_missing_means_no_files(
-    session: AsyncSession, tenant: Tenant, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setitem(sys.modules, "app.services.knowledge", None)  # makes the import fail
+async def test_no_files_means_no_knowledge(session: AsyncSession, tenant: Tenant) -> None:
     assert await icp_job.load_knowledge_text(session, tenant.id) == ""
     assert await icp_job.run_icp_build(session, tenant.id) == 1
+
+
+async def test_ready_knowledge_files_reach_the_icp_job(session: AsyncSession, tenant: Tenant) -> None:
+    """The real P1-1 service over the real knowledge_files table (migration 0007)."""
+    common = {"tenant_id": tenant.id, "mime_type": "text/markdown", "size_bytes": 10, "storage_path": "x"}
+    body = "مصنع ملابس أطفال"
+    session.add(
+        KnowledgeFile(
+            **common, filename="profile.md", extracted_text=body, char_count=len(body), status="ready"
+        )
+    )
+    session.add(
+        KnowledgeFile(
+            **common, filename="draft.md", extracted_text="ignored", char_count=7, status="processing"
+        )
+    )
+    await session.flush()
+    assert await icp_job.load_knowledge_text(session, tenant.id) == f"### profile.md\n{body}"
 
 
 @pytest.mark.usefixtures("knowledge")

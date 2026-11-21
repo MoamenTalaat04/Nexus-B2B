@@ -8,9 +8,14 @@ POST https://places.googleapis.com/v1/places:searchText with httpx. Details chec
   (radius ≤ 50 km).
 - pagination: pass nextPageToken as pageToken with every other parameter unchanged; at most 60 results
   per query.
+- locationBias only *prefers* the circle, so results from a neighbouring governorate come back too (a real
+  "Cairo" run returned Giza shops). search() drops a place whose own governorate (from addressComponents) is
+  known and differs from the requested one; a place without that component is kept. Dropped places still
+  count toward max_results for paging, so the filter never adds Places requests.
 
 No tracing here (adapters have no RunContext). B's sourcing job records the EXTERNAL_API step around search()
-and reads `last_request_count` (billable requests made by the last search) for the cost log.
+and reads `last_request_count` (billable requests made by the last search) for the cost log;
+`last_dropped_count` is how many places the governorate filter removed.
 """
 
 import asyncio
@@ -92,6 +97,13 @@ def _component(place: dict[str, Any], types: tuple[str, ...]) -> str | None:
     return None
 
 
+def outside_region(place: dict[str, Any], region: RegionFilter) -> bool:
+    """True when the place's own governorate is known and is not the requested one."""
+    wanted = find_governorate(region.governorate)
+    actual = find_governorate(_component(place, _GOVERNORATE_TYPES))
+    return wanted is not None and actual is not None and actual.name != wanted.name
+
+
 def to_place_result(place: dict[str, Any], region: RegionFilter) -> PlaceResult:
     """Map one Places API place to the contract's PlaceResult (governorate normalized to the English name)."""
     governorate = find_governorate(_component(place, _GOVERNORATE_TYPES))
@@ -138,10 +150,12 @@ class GooglePlacesSource:
             )
         self._client = client  # tests inject a mocked client; otherwise one client per search
         self.last_request_count = 0  # billable requests made by the last search() call
+        self.last_dropped_count = 0  # places the last search() dropped as outside the requested governorate
         self._sleep = asyncio.sleep
 
     async def search(self, query: str, *, region: RegionFilter, max_results: int = 20) -> list[PlaceResult]:
         self.last_request_count = 0
+        self.last_dropped_count = 0
         limit = max(1, min(max_results, MAX_RESULTS_PER_QUERY))
         body: dict[str, Any] = {
             "textQuery": query,
@@ -155,17 +169,22 @@ class GooglePlacesSource:
 
         results: list[PlaceResult] = []
         seen: set[str] = set()
+        fetched = 0  # distinct places Google returned, kept or dropped (drives paging, so cost is unchanged)
         token: str | None = None
         client = self._client or httpx.AsyncClient(timeout=20)
         try:
-            while len(results) < limit:
+            while fetched < limit:
                 data = await self._post(client, {**body, "pageToken": token} if token else body)
                 for place in data.get("places") or []:
                     if "id" not in place or place["id"] in seen:
                         continue
                     seen.add(place["id"])
-                    results.append(to_place_result(place, region))
-                    if len(results) >= limit:
+                    fetched += 1
+                    if outside_region(place, region):
+                        self.last_dropped_count += 1
+                    else:
+                        results.append(to_place_result(place, region))
+                    if fetched >= limit:
                         break
                 token = data.get("nextPageToken")
                 if not token:
@@ -173,6 +192,10 @@ class GooglePlacesSource:
         finally:
             if self._client is None:
                 await client.aclose()
+        if self.last_dropped_count:
+            logger.info(
+                "places: dropped %d result(s) outside %s", self.last_dropped_count, region.governorate
+            )
         return results
 
     async def _post(self, client: httpx.AsyncClient, body: dict[str, Any]) -> dict[str, Any]:

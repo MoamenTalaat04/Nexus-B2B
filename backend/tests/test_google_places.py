@@ -172,6 +172,52 @@ async def test_duplicate_places_across_pages_are_skipped() -> None:
     assert [r.source_ref for r in results] == [f"place-{i}" for i in range(5)]
 
 
+GIZA_COMPONENTS = [
+    {"longText": "الدقي", "shortText": "الدقي", "types": ["locality", "political"]},
+    {
+        "longText": "محافظة الجيزة",
+        "shortText": "الجيزة",
+        "types": ["administrative_area_level_1", "political"],
+    },
+]
+
+
+@respx.mock
+async def test_places_in_another_governorate_are_dropped() -> None:
+    body = page(range(0, 4))
+    body["places"][1]["addressComponents"] = GIZA_COMPONENTS  # a Giza shop in a Cairo search
+    body["places"][2]["addressComponents"] = []  # no governorate info: kept (we can't tell)
+    respx.post(SEARCH_URL).mock(return_value=httpx.Response(200, json=body))
+    src = source()
+    results = await src.search("kids wear", region=CAIRO, max_results=20)
+    assert [r.source_ref for r in results] == ["place-0", "place-2", "place-3"]
+    assert results[1].governorate == "Cairo"  # the kept place without components falls back to the region
+    assert src.last_dropped_count == 1 and src.last_request_count == 1
+
+
+@respx.mock
+async def test_the_filter_never_adds_requests() -> None:
+    first = page(range(0, 20), "t1")
+    for p_ in first["places"][:5]:
+        p_["addressComponents"] = GIZA_COMPONENTS
+    route = respx.post(SEARCH_URL).mock(return_value=httpx.Response(200, json=first))
+    src = source()
+    results = await src.search("kids wear", region=CAIRO, max_results=20)
+    assert len(results) == 15 and src.last_dropped_count == 5
+    assert len(route.calls) == 1 and src.last_request_count == 1  # no second page just to refill
+
+
+@respx.mock
+async def test_giza_search_keeps_giza_and_unknown_region_keeps_everything() -> None:
+    body = page(range(0, 2))
+    body["places"][0]["addressComponents"] = GIZA_COMPONENTS
+    respx.post(SEARCH_URL).mock(return_value=httpx.Response(200, json=body))
+    giza = await source().search("x", region=RegionFilter(governorate="Giza"), max_results=20)
+    assert [r.source_ref for r in giza] == ["place-0"]
+    anywhere = await source().search("x", region=RegionFilter(governorate="Atlantis"), max_results=20)
+    assert len(anywhere) == 2  # a governorate we don't know: no filtering
+
+
 @respx.mock
 async def test_403_gives_a_clear_message_and_is_not_retried(no_sleep: list[float]) -> None:
     route = respx.post(SEARCH_URL).mock(
