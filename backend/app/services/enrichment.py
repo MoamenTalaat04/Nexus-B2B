@@ -94,10 +94,19 @@ async def enrich_lead(
     session: AsyncSession,
     run: RunContext,
     lead: Lead,
+    *,
+    db_lock: asyncio.Lock | None = None,
 ) -> list[Contact]:
-    """Run all configured enrichers and persist tenant-scoped contacts."""
+    """Run all configured enrichers and persist tenant-scoped contacts.
+
+    The enrichers (network) may run for several leads at once, but one AsyncSession allows only one operation
+    at a time: callers that enrich leads concurrently on the same session pass a shared `db_lock`, which
+    guards every database read and write below.
+    """
+    lock = db_lock or asyncio.Lock()
     enrichers = registry.get_enrichers()
-    existing = await _existing_contacts(session, lead)
+    async with lock:
+        existing = await _existing_contacts(session, lead)
     merged: dict[tuple[ContactType, str], ContactCandidate] = {}
 
     for row in existing:
@@ -171,51 +180,54 @@ async def enrich_lead(
         if previous_winner is None or rank > previous_winner[0]:
             winners[contact_type] = (rank, key, candidate)
 
-    persisted: list[Contact] = []
-    for key, candidate in merged.items():
-        contact_type, value = key
-        source = _safe_source(candidate.source)
-        existing_row = existing_by_key.get(key)
-        winner = winners.get(contact_type)
-        is_primary = bool(winner and winner[1] == key)
+    async with lock:
+        persisted: list[Contact] = []
+        for key, candidate in merged.items():
+            contact_type, value = key
+            source = _safe_source(candidate.source)
+            existing_row = existing_by_key.get(key)
+            winner = winners.get(contact_type)
+            is_primary = bool(winner and winner[1] == key)
 
-        if existing_row is not None:
-            existing_row.source = source
-            existing_row.confidence = candidate.confidence
-            existing_row.is_primary = is_primary
-            persisted.append(existing_row)
-        else:
-            row = Contact(
-                tenant_id=lead.tenant_id,
-                lead_id=lead.id,
-                type=contact_type.value,
-                value=value,
-                source=source,
-                is_primary=is_primary,
-                confidence=candidate.confidence,
+            if existing_row is not None:
+                existing_row.source = source
+                existing_row.confidence = candidate.confidence
+                existing_row.is_primary = is_primary
+                persisted.append(existing_row)
+            else:
+                row = Contact(
+                    tenant_id=lead.tenant_id,
+                    lead_id=lead.id,
+                    type=contact_type.value,
+                    value=value,
+                    source=source,
+                    is_primary=is_primary,
+                    confidence=candidate.confidence,
+                )
+                session.add(row)
+                persisted.append(row)
+
+        await session.flush()
+
+        has_mobile = any(
+            contact.type == ContactType.MOBILE.value for contact in persisted if contact.is_primary
+        )
+        if has_mobile:
+            await lead_state.transition(
+                session,
+                lead,
+                LeadStatus.ENRICHED,
+                reason="mobile contact found",
+                actor="agent",
             )
-            session.add(row)
-            persisted.append(row)
+        else:
+            await lead_state.transition(
+                session,
+                lead,
+                LeadStatus.NO_CONTACT,
+                reason="no mobile number found",
+                actor="agent",
+            )
 
-    await session.flush()
-
-    has_mobile = any(contact.type == ContactType.MOBILE.value for contact in persisted if contact.is_primary)
-    if has_mobile:
-        await lead_state.transition(
-            session,
-            lead,
-            LeadStatus.ENRICHED,
-            reason="mobile contact found",
-            actor="agent",
-        )
-    else:
-        await lead_state.transition(
-            session,
-            lead,
-            LeadStatus.NO_CONTACT,
-            reason="no mobile number found",
-            actor="agent",
-        )
-
-    await session.flush()
+        await session.flush()
     return persisted

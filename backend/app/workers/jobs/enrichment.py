@@ -57,15 +57,19 @@ async def run_enrich_leads(
         )
 
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_LEADS)
+        db_lock = (
+            asyncio.Lock()
+        )  # websites are crawled in parallel; the shared session is used by one lead at a time
         summary = {"processed": 0, "enriched": 0, "no_contact": 0, "failed": 0}
 
         async def process_one(lead: Lead) -> None:
             async with semaphore:
                 try:
-                    await enrich_lead(session, run, lead)
+                    await enrich_lead(session, run, lead, db_lock=db_lock)
                     summary["processed"] += 1
                     if lead.status == LeadStatus.ENRICHED.value:
-                        lead.next_action_at = datetime.now(UTC)
+                        async with db_lock:
+                            lead.next_action_at = datetime.now(UTC)
                         summary["enriched"] += 1
                     elif lead.status == LeadStatus.NO_CONTACT.value:
                         summary["no_contact"] += 1

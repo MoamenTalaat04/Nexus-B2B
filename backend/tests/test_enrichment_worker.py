@@ -57,7 +57,7 @@ async def test_run_enrich_leads_creates_enrichment_run_and_sets_next_action(
     run = _FakeRun()
     agent_args: dict[str, object] = {}
 
-    async def fake_enrich_lead(session: object, ctx: object, lead: _FakeLead) -> None:
+    async def fake_enrich_lead(session: object, ctx: object, lead: _FakeLead, **kwargs: object) -> None:
         return None
 
     monkeypatch.setattr(enrichment_job, "enrich_lead", fake_enrich_lead)
@@ -104,7 +104,7 @@ async def test_run_enrich_leads_isolates_failures(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(enrichment_job, "agent_run", fake_context)
 
-    async def fake_enrich_lead(session: object, ctx: object, lead: _FakeLead) -> None:
+    async def fake_enrich_lead(session: object, ctx: object, lead: _FakeLead, **kwargs: object) -> None:
         if lead is first:
             raise RuntimeError("one lead failed")
 

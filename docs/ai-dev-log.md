@@ -186,3 +186,10 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
 - Found in A's P3-1 (not fixed here, A's files): `run_enrich_leads` runs `enrich_lead` concurrently on ONE
   AsyncSession; the first run failed 1 of 9 leads with "Session is already flushing" (intermittent; the second run
   passed). Fix: serialize the DB part (a lock around reads/writes) or give each lead its own session.
+
+### P3-1 fix — enrichment session race — Moamen Talaat (B + C) — 2026-11-21
+- Fixed the race noted above: `enrich_lead(..., db_lock=...)` guards its DB reads/writes with a lock shared by
+  `run_enrich_leads` (also used for `next_action_at`); the enrichers (website crawling) still run up to 5 leads in
+  parallel. New `tests/test_enrichment_concurrency.py` enriches 12 leads on one real session: it fails 3/3 without
+  the lock and passes with it (A's existing tests used fake sessions, so they could not catch it).
+- `poe check`: 677 passed. Real chain re-run: 9 enriched-or-no_contact, 0 failed, 7 first touches pending approval.
