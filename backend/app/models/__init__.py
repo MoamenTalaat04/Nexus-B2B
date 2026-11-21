@@ -5,6 +5,7 @@ One file per area (P0-2); see app/models/README.md for the ER diagram.
 
 from app.models.base import Base, TenantMixin, TimestampMixin, UUIDPkMixin
 from app.models.icp import IcpVersion
+from app.models.knowledge import KnowledgeFile
 from app.models.leads import Contact, Lead, LeadNote, LeadOutcome, LeadStatusHistory, SearchQuery
 from app.models.messaging import ChannelConnection, Conversation, DemoRoute, Message, MessageTemplate
 from app.models.notifications import LearnedInsight, Notification
@@ -21,6 +22,7 @@ __all__ = [
     "Conversation",
     "DemoRoute",
     "IcpVersion",
+    "KnowledgeFile",
     "Lead",
     "LeadNote",
     "LeadOutcome",

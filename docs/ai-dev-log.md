@@ -170,3 +170,19 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
   paging, so no extra Places requests (`last_dropped_count` exposes the number). 3 new tests. Real re-run: a
   Cairo/Heliopolis "baby shop" search returned 19 kept + 1 dropped; two more Cairo searches had nothing to drop.
   This time the model also generated a Giza query, so finding (2) above is not consistent either way.
+
+### P1-1 fix — missing `knowledge_files` table — Moamen Talaat (B + C) — 2026-11-21
+- A's P1-1 push (63dfc87) used `app.models.knowledge.KnowledgeFile`, but neither the model nor a migration existed, so
+  every `/knowledge` call returned 500 and C's ICP build crashed (`ModuleNotFoundError`); A's tests faked the table.
+- Added `app/models/knowledge.py` and migration `0007` exactly as CONTRACTS §3 (status CHECK processing|ready|failed,
+  tenant FK + index, tenant/created_at index). P1-3: removed the ICP job's "knowledge not on main yet" fallback; it now
+  calls `services/knowledge.get_knowledge_text` directly, with a test over real rows (only `ready` files are used).
+- Updated A's stale registry test: in real mode `get_enrichers()` now returns A's two P3-1 enrichers.
+- `poe check`: 676 passed. Not done: a manual upload of a real Arabic PDF through `POST /knowledge` (A's self-check).
+- Real chain self-check (`scripts/try_chain.py`; real Gemini + Places + public websites, demo tenant, nothing sent):
+  B sourcing 10 leads (1 Places request) → A scoring 9 qualified / 1 disqualified (a shoe store) with sensible
+  reasons → A enrichment 7 enriched (7 primary mobiles) / 2 no_contact → C outreach tick 7 first touches pending
+  approval. Hand-offs (job_score_leads run_id, job_enrich_leads lead_ids) are correct.
+- Found in A's P3-1 (not fixed here, A's files): `run_enrich_leads` runs `enrich_lead` concurrently on ONE
+  AsyncSession; the first run failed 1 of 9 leads with "Session is already flushing" (intermittent; the second run
+  passed). Fix: serialize the DB part (a lock around reads/writes) or give each lead its own session.

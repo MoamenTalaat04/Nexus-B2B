@@ -120,8 +120,8 @@ def test_registry_returns_mocks_in_mock_mode() -> None:
 
 def test_registry_real_mode_names_missing_tasks() -> None:
     with patch.object(registry.settings, "USE_MOCK_ADAPTERS", False):
-        with pytest.raises(NotImplementedError, match=r"app\.adapters\.enrichment\.places_contacts.*P3-1"):
-            registry.get_enrichers()
+        names = sorted(type(item).__name__ for item in registry.get_enrichers())  # P3-1 landed
+        assert names == ["PlacesContactsEnricher", "WebsiteCrawlerEnricher"]
         with pytest.raises(NotImplementedError, match=r"app\.adapters\.notify\.telegram.*P4-2"):
             registry.get_notifier()
 

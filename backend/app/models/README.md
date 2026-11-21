@@ -13,8 +13,7 @@ table and column; this folder implements it.
 | `leads.py` | `search_queries`, `leads`, `contacts`, `lead_status_history`, `lead_notes`, `lead_outcomes` |
 | `messaging.py` | `channel_connections`, `message_templates`, `conversations`, `messages`, `demo_routes` |
 | `notifications.py` | `notifications`, `learned_insights` |
-
-`knowledge_files` (§3) belongs to P1-1 and is added there.
+| `knowledge.py` | `knowledge_files` (P1-1's API and service; migration 0007) |
 
 ## Conventions
 - `id uuid default gen_random_uuid()` (pgcrypto, migration 0001), `created_at`/`updated_at timestamptz`.
