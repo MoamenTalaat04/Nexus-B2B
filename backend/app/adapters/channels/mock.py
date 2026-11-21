@@ -121,6 +121,9 @@ class MockChannelAdapter:
         return [t.model_copy() for t in MOCK_TEMPLATES]
 
 
+MockChannel = MockChannelAdapter
+
+
 def simulate_inbound(
     *,
     phone_number_id: str,

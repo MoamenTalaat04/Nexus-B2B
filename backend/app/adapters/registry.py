@@ -15,7 +15,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.base import ChannelAdapter, SearchSource
+from app.adapters.base import ChannelAdapter, Enricher, Notifier, SearchSource
 from app.config import settings
 from app.models.enums import ChannelType
 
@@ -24,6 +24,29 @@ _SEARCH_SOURCES = {
     "google_places": ("app.adapters.search.google_places", "GooglePlacesSource", "P2-1"),
 }
 _MOCK_SEARCH = ("app.adapters.search.mock", "MockSearchSource", "P0-1")
+
+# ------------------------------------------------------------------------------------ enrichers (P3-1)
+
+_ENRICHERS = {
+    "places_contacts": (
+        "app.adapters.enrichment.places_contacts",
+        "PlacesContactsEnricher",
+        "P3-1",
+    ),
+    "website_crawler": (
+        "app.adapters.enrichment.website_crawler",
+        "WebsiteCrawlerEnricher",
+        "P3-1",
+    ),
+}
+_MOCK_ENRICHER = ("app.adapters.enrichment.mock", "MockEnricher", "P0-1")
+
+# ------------------------------------------------------------------------------------ notifiers (P4-2)
+
+_NOTIFIERS = {
+    "telegram": ("app.adapters.notify.telegram", "TelegramNotifier", "P4-2"),
+}
+_MOCK_NOTIFIER = ("app.adapters.notify.mock", "MockNotifier", "P0-1")
 
 
 def _load(module_name: str, class_name: str, task: str) -> type:
@@ -48,12 +71,34 @@ def get_search_source(name: str = "google_places") -> SearchSource:
     return source
 
 
+def get_enrichers() -> list[Enricher]:
+    """All configured contact enrichers, or the deterministic mock in mock mode."""
+    if settings.USE_MOCK_ADAPTERS:
+        mock: Enricher = _load(*_MOCK_ENRICHER)()
+        return [mock]
+
+    enrichers: list[Enricher] = []
+    for module_name, class_name, task in _ENRICHERS.values():
+        enrichers.append(_load(module_name, class_name, task)())
+    return enrichers
+
+
+def get_notifier() -> Notifier:
+    """The configured owner notifier, or the in-memory mock in mock mode."""
+    if settings.USE_MOCK_ADAPTERS:
+        mock: Notifier = _load(*_MOCK_NOTIFIER)()
+        return mock
+    module_name, class_name, task = _NOTIFIERS["telegram"]
+    notifier: Notifier = _load(module_name, class_name, task)()
+    return notifier
+
+
 # ------------------------------------------------------------------------------------ channels (P3-2)
 
 _CHANNELS = {
     ChannelType.WHATSAPP: ("app.adapters.channels.whatsapp_cloud", "WhatsAppCloudAdapter", "P3-2"),
 }
-_MOCK_CHANNEL = ("app.adapters.channels.mock", "MockChannelAdapter", "P3-2")
+_MOCK_CHANNEL = ("app.adapters.channels.mock", "MockChannel", "P0-1")
 
 
 class ChannelNotConnected(Exception):

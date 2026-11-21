@@ -27,6 +27,15 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
 
 ## Entries
 
+### P0-1 — External accounts, adapters & mocks — Member A — 2026-11-20
+- Sessions / approx. time: 1 session, implementation and focused adapter tests.
+- Plan-mode corrections: preserved existing stand-in and P3-2 implementations for `base.py`, `registry.py`, Google Places and the WhatsApp mock. Added only the missing search/enrichment/notifier mocks and registry getters.
+- What the agent did well: kept provider access behind the registry, made search/enrichment/notifier mocks deterministic, and added focused validation/tests without modifying frontend files.
+- What it got wrong and how it was caught: the first search mock draft used incorrectly sized generated phone strings; corrected it to E.164-style +20 10/11/12/15 numbers with eight-digit suffixes.
+- Manual/account status: `docs/setup-accounts.md` documents provider setup without secrets. The WhatsApp IDs and permanent token remain a private coordination item with Member C/Moamen.
+- Open items: create the Google key and submit/verify the WhatsApp templates; run a real-account smoke test only after credentials are available.
+- Would I do it differently next time? Keep account setup and secret-sharing in a private channel while maintaining contract-only documentation in the repository.
+
 ### P0-0 — Repo scaffold, tooling, CI — Claude (Claude Code, Opus 5.5) — 2026-11-11
 - Sessions / approx. time: 1 session, about 1 hour including toolchain setup on a fresh Windows machine.
 - Plan-mode corrections: the repo's first README proposed a different stack (NestJS, Prisma, BullMQ, Vite). The human chose to keep the planned stack (FastAPI, Next.js, WhatsApp first), and the README was rewritten to match.

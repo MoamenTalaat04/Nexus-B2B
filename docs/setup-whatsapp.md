@@ -1,4 +1,4 @@
-# WhatsApp Cloud API — developer setup (P3-2)
+# WhatsApp Cloud API — developer setup (P0-1 first version; P3-2 completes the connection flow)
 
 We use **only the official WhatsApp Cloud API** (Meta Graph API). Never use unofficial WhatsApp Web libraries:
 they get numbers banned and break Meta's terms. Check Meta's current docs when anything below looks different —

@@ -7,10 +7,11 @@ P0-1 owns this file; every model and Protocol from the contract is already here,
 so P0-1 only adds docs and the mocks.
 """
 
+import re
 from datetime import datetime
 from typing import Any, Protocol
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import ChannelType, ContactType, MessageStatus
 
@@ -90,6 +91,13 @@ class InboundMessage(BaseModel):
     text: str
     timestamp: datetime
     raw: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("from_phone")
+    @classmethod
+    def validate_from_phone(cls, value: str) -> str:
+        if re.fullmatch(r"\+[1-9]\d{1,14}", value) is None:
+            raise ValueError("from_phone must be in E.164 format")
+        return value
 
 
 class StatusUpdate(BaseModel):
