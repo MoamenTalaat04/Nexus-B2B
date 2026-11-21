@@ -8,6 +8,7 @@ export const AUTH_ROUTES = {
 
 export const CUSTOMER_ROUTES = {
   dashboard: "/",
+  onboarding: "/onboarding",
   icp: "/icp",
   leads: "/leads",
   leadDetail: (id: string) => `/leads/${id}`,

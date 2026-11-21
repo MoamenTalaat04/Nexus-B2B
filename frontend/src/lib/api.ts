@@ -113,4 +113,6 @@ export const api = {
     }),
   delete: <T>(path: string, options?: ApiFetchOptions) =>
     apiFetch<T>(path, { ...options, method: "DELETE" }),
+  upload: <T>(path: string, formData: FormData, options?: ApiFetchOptions) =>
+    apiFetch<T>(path, { ...options, method: "POST", body: formData }),
 };
