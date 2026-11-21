@@ -212,4 +212,3 @@ async def update_active(
         notes=body.notes,
     )
     return _full(new_v)
-

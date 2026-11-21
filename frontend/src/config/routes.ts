@@ -29,6 +29,7 @@ export const ADMIN_ROUTES = {
   billing: "/admin/billing",
   support: "/admin/support",
   supportDetail: (id: string) => `/admin/support/${id}`,
+  security: "/admin/security",
 } as const;
 
 export const CUSTOMER_ROLES: UserRole[] = ["tenant_owner", "tenant_member"];

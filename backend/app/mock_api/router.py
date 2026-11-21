@@ -41,4 +41,3 @@ def build_mock_router() -> APIRouter:
     api.include_router(reports.router)
 
     return api
-

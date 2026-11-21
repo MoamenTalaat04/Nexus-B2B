@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Fingerprint } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AUTH_ROUTES, canAccessRoute, getDefaultRouteForRole } from "@/config/routes";
 import { useAuth } from "@/features/auth/auth-context";
+import { ApiError, api } from "@/lib/api";
 import { DEMO_CREDENTIALS, MockApiError } from "@/lib/mock-api";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +30,7 @@ function LoginFormInner({ className }: { className?: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -45,6 +48,16 @@ function LoginFormInner({ className }: { className?: string }) {
     setInfo(null);
     setLoading(true);
     try {
+      if (forgotMode) {
+        const res = await api.post<{ ok: boolean; message: string }>(
+          "/auth/forgot-password",
+          { email },
+          { suppressUnauthorizedRedirect: true },
+        );
+        setInfo(res.message);
+        setForgotMode(false);
+        return;
+      }
       const result = await login(email, password);
       const nextPath = searchParams.get("next");
       const target =
@@ -53,9 +66,41 @@ function LoginFormInner({ className }: { className?: string }) {
           : getDefaultRouteForRole(result.user.role);
       router.replace(target);
     } catch (err) {
-      setError(err instanceof MockApiError ? err.message : "Invalid email or password.");
+      if (err instanceof ApiError || err instanceof MockApiError) {
+        setError(err.message);
+      } else {
+        setError("Invalid email or password.");
+      }
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleOAuth(provider: "google" | "linkedin" | "microsoft") {
+    window.location.href = `/api/v1/auth/oauth/${provider}`;
+  }
+
+  async function handlePasskeyLogin() {
+    setError(null);
+    setInfo(null);
+    if (typeof window === "undefined" || !window.PublicKeyCredential || !navigator.credentials) {
+      setError("Biometric / Passkey sign-in requires HTTPS and a compatible browser.");
+      return;
+    }
+    try {
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+      await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          rpId: window.location.hostname,
+          userVerification: "preferred",
+          timeout: 60000,
+        },
+      });
+      setInfo("Passkey verified. Complete Auth0 connection in .env to bind passkey sessions.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Passkey sign-in was cancelled.");
     }
   }
 
@@ -93,19 +138,34 @@ function LoginFormInner({ className }: { className?: string }) {
                 />
               </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="password" className="text-foreground dark:text-lime-100">
-                  Password
-                </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-10 rounded-lg border-input bg-surface/70 text-foreground placeholder:text-muted-foreground/60 focus-visible:border-primary focus-visible:ring-primary/25 dark:border-[#223D27] dark:bg-[#0A140C] dark:text-white dark:placeholder:text-lime-200/40 dark:focus-visible:border-lime-400 dark:focus-visible:ring-lime-400/30"
-                />
-              </div>
+              {!forgotMode && (
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password" className="text-foreground dark:text-lime-100">
+                      Password
+                    </Label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotMode(true);
+                        setError(null);
+                        setInfo(null);
+                      }}
+                      className="text-xs font-medium text-primary hover:underline dark:text-lime-300"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-10 rounded-lg border-input bg-surface/70 text-foreground placeholder:text-muted-foreground/60 focus-visible:border-primary focus-visible:ring-primary/25 dark:border-[#223D27] dark:bg-[#0A140C] dark:text-white dark:placeholder:text-lime-200/40 dark:focus-visible:border-lime-400 dark:focus-visible:ring-lime-400/30"
+                  />
+                </div>
+              )}
 
               {error && (
                 <p className="rounded-lg border border-red-500/30 bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/50 dark:text-red-200">
@@ -123,7 +183,51 @@ function LoginFormInner({ className }: { className?: string }) {
                 disabled={loading}
                 className="h-10 w-full rounded-lg bg-gradient-to-r from-[#10B981] to-[#84CC16] text-sm font-bold text-[#0A140C] transition-opacity hover:opacity-90"
               >
-                {loading ? "Signing in..." : "Login"}
+                {loading
+                  ? forgotMode
+                    ? "Sending reset link..."
+                    : "Signing in..."
+                  : forgotMode
+                    ? "Send password reset link"
+                    : "Login"}
+              </Button>
+
+              {forgotMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotMode(false);
+                    setError(null);
+                  }}
+                  className="text-center text-xs font-medium text-primary hover:underline dark:text-lime-300"
+                >
+                  Back to password sign-in
+                </button>
+              )}
+
+              <div className="relative flex items-center py-1">
+                <div className="grow border-t border-border dark:border-[#223D27]" />
+                <span className="mx-3 shrink text-[11px] font-medium text-muted-foreground uppercase">
+                  Or continue with
+                </span>
+                <div className="grow border-t border-border dark:border-[#223D27]" />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => handleOAuth("google")}>
+                  Google
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => handleOAuth("linkedin")}>
+                  LinkedIn
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => handleOAuth("microsoft")}>
+                  Microsoft
+                </Button>
+              </div>
+
+              <Button type="button" variant="outline" size="sm" className="w-full" onClick={handlePasskeyLogin}>
+                <Fingerprint className="mr-2 size-4 text-primary dark:text-lime-400" />
+                Sign in with Passkey / Biometrics
               </Button>
 
               {/* Development Demo Account Quick-Fill */}

@@ -291,4 +291,3 @@ async def mark_sent_manually(
         lead.status = LeadStatus.CONTACTED.value
 
     return _to_outreach_item(store, msg, lead)
-

@@ -11,6 +11,8 @@ import os
 # Force safe settings BEFORE the app (and its settings) are imported.
 os.environ["USE_MOCK_ADAPTERS"] = "true"
 os.environ["USE_MOCK_LLM"] = "true"
+os.environ["AUTH0_DOMAIN"] = ""
+os.environ["FRONTEND_ORIGIN"] = "http://localhost:3000"
 os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long!")
 
 from collections.abc import AsyncIterator

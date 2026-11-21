@@ -99,4 +99,3 @@ async def mark_all_read(current_user: CurrentUser = Depends(get_mock_current_use
             n.read_at = now
             updated += 1
     return {"marked_read": updated}
-

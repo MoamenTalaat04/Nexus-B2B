@@ -351,4 +351,3 @@ def reset_store() -> MockStore:
 
     populate_seed_data(_store)
     return _store
-

@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     LLM_TIMEOUT_SECONDS: float = 120.0
 
     # External services
+    AUTH0_DOMAIN: str = ""
+    AUTH0_CLIENT_ID: str = ""
+    AUTH0_CLIENT_SECRET: str = ""
+    AUTH0_AUDIENCE: str = ""
+    AUTH0_CONNECTION: str = "Username-Password-Authentication"
     GOOGLE_PLACES_API_KEY: str = ""
     WHATSAPP_APP_SECRET: str = ""
     WHATSAPP_VERIFY_TOKEN: str = ""

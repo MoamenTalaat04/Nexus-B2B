@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SecuritySettingsPanel } from "@/features/auth/components/security-settings-panel";
 import { CustomerBillingView } from "@/features/billing/components/customer-billing-view";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +12,7 @@ const SETTINGS_TABS = [
   { id: "channels", label: "Channels" },
   { id: "billing", label: "Plan & Billing" },
   { id: "team", label: "Team" },
+  { id: "security", label: "Security" },
 ] as const;
 
 export default function SettingsPage() {
@@ -44,6 +46,8 @@ export default function SettingsPage() {
       <div role="tabpanel">
         {activeTab === "billing" ? (
           <CustomerBillingView />
+        ) : activeTab === "security" ? (
+          <SecuritySettingsPanel />
         ) : (
           <p className="text-sm text-muted-foreground">{current.label}</p>
         )}

@@ -311,4 +311,3 @@ def test_notifications_dashboard_reports_and_reset(mock_client: TestClient) -> N
     reset = mock_client.post("/api/v1/mock/reset")
     assert reset.status_code == 200
     assert mock_client.get("/api/v1/insights").json()["active"]["version"] == 2
-
