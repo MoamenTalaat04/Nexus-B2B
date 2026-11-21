@@ -193,3 +193,27 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
   parallel. New `tests/test_enrichment_concurrency.py` enriches 12 leads on one real session: it fails 3/3 without
   the lock and passes with it (A's existing tests used fake sessions, so they could not catch it).
 - `poe check`: 677 passed. Real chain re-run: 9 enriched-or-no_contact, 0 failed, 7 first touches pending approval.
+
+### Missing A/B/C backend work — Moamen Talaat (owns B + C; A's items done with the team's OK) — 2026-11-21
+- **P4-3 (C) reports backend:** `services/reports.py` + `api/reports.py` — `/reports/summary` (KPIs + previous
+  period + deltas + definitions), `/funnel`, `/segments?by=`, `/costs`, `/timeseries?metric=`. Pure SQL aggregates,
+  tenant-scoped, Cairo day boundaries, default last 30 days. `tests/test_reports.py` asserts every metric exactly
+  (medians, deltas, isolation, empty range, validation). Self-check: reply rate 0.725 and cost per qualified lead
+  $0.0099 on the demo seed match a hand-written SQL query.
+- **P4-1 (A) CRM backend:** `services/crm.py` + `api/leads_actions.py` — GET/PATCH `/leads/{id}`, notes, outcome
+  (WON/LOST + pause + `insights.on_outcome_recorded`), manual contacts (E.164; mobile unblocks no_contact), manual
+  message (409 `window_closed`), `/leads/export.xlsx` (Arabic, frozen header, list filters). Opted-out leads cannot be
+  moved or messaged. `tests/test_crm.py` (6 tests). The list + `/leads/stats` stay P2-4 (D).
+- **P2-3 (A) eval:** D's harness (P1-4) is not on main, so `scripts/eval_lead_scoring.py` runs A's suite (batches of
+  15, 3 calls). gemini-3.5-flash-lite: precision 1.000, recall 0.739, injection case not_fit (PASS), 0 unscored,
+  ≈ $0.025 per 100 leads (estimated). Misses: 5 "partial" leads scored 5 (A's summary counts partial as qualified)
+  and one wholesale shop scored not_fit. Not done: `--tier smart` (the scorer hard-codes FAST).
+- **P1-1 (A) self-check:** real API upload of Arabic .md and .docx → ready with readable previews; .exe → 415;
+  `get_knowledge_text` and an Arabic `search_knowledge` hit the right paragraph; delete works. The demo seed now
+  stores its knowledge file as a real `knowledge_files` row.
+- **P3-2 (B) self-check:** connecting WhatsApp with an invalid token (real Graph call) → channel `status=error`,
+  `last_error="invalid_token: … (code 190)"`, no token echoed. **P4-4 (B):** `poe seed-demo --reset` + an API walk
+  of DEMO-SCRIPT (settings, ICP, knowledge, runs, queues, insights, all reports, lead detail, export) → all 200.
+- Docs for D: `docs/api/reports-and-crm-endpoints.md`. `poe check`: 686 passed.
+- Still open: the WhatsApp reply test (needs cloudflared + the Meta webhook set in the dashboard by the owner);
+  `frontend/src/lib/types.ts` (frontend, waits for D).
