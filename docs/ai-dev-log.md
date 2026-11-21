@@ -217,3 +217,19 @@ We build this project with coding agents (Claude Code + Claude Opus 5.5). After 
 - Docs for D: `docs/api/reports-and-crm-endpoints.md`. `poe check`: 686 passed.
 - Still open: the WhatsApp reply test (needs cloudflared + the Meta webhook set in the dashboard by the owner);
   `frontend/src/lib/types.ts` (frontend, waits for D).
+
+### P3-2 + P3-3 real WhatsApp reply test — Moamen Talaat (B + C) — 2026-11-21
+- Setup: API with real adapters behind a cloudflared quick tunnel; Meta webhook → `/api/v1/webhooks/whatsapp`
+  (verify handshake 200; wrong token 403), field `messages` subscribed.
+- **Gotcha found:** Meta verified the webhook but sent no message events: the app was not subscribed to the WABA
+  (only Meta's "WA DevX Webhook Events" app was). Fixed with `POST /<WABA_ID>/subscribed_apps` (token from .env);
+  messages sent before that are not re-delivered. Added to the setup checklist below.
+- Result on the demo tenant (phone routed to «عالم الصغار (تجريبي)» via demo_routes): reply «ممكن الاسعار» stored
+  as inbound, 24h window opened, lead contacted → replied; then "STOP" → replied → opted_out ("the lead asked to
+  stop", actor system), next_action_at cleared. An agent follow-up and an owner manual message to that lead were both
+  refused (`blocked: opted_out` / 409 `opted_out`). Other demo leads untouched.
+- Not covered: the automatic answer to a reply (P3-4 reply agent, D) — `job_handle_inbound` is enqueued but has no
+  handler on main yet.
+- Setup checklist for the next run: (1) cloudflared tunnel → set the callback URL in Meta (it changes every run);
+  (2) the app must be in `GET /<WABA_ID>/subscribed_apps`; (3) field `messages` subscribed; (4) run the API with
+  `USE_MOCK_ADAPTERS=false`.

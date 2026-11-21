@@ -45,7 +45,11 @@ Template parameters may not contain newlines, tabs or more than 4 spaces in a ro
    - Verify token: your `WHATSAPP_VERIFY_TOKEN`
    Meta calls `GET …?hub.mode=subscribe&hub.verify_token=…&hub.challenge=…`; we answer with the challenge.
 3. Under **Webhook fields**, **subscribe to `messages`** (this delivers both inbound messages and statuses).
-4. Every POST is signed (`X-Hub-Signature-256`); a bad signature gets 401. Events are routed to the tenant by
+4. **Subscribe the app to your WABA** (easy to miss with a system-user token): if Meta verifies the webhook but
+   your replies never arrive, the app is not subscribed. Check `GET https://graph.facebook.com/v27.0/<WABA_ID>/subscribed_apps`
+   (with the access token); if your app is missing, `POST` to the same URL once. Messages sent before that are not
+   re-delivered — send them again. (Run the API with `USE_MOCK_ADAPTERS=false` for this test.)
+5. Every POST is signed (`X-Hub-Signature-256`); a bad signature gets 401. Events are routed to the tenant by
    `metadata.phone_number_id` and stored idempotently (Meta retries are harmless).
 
 The cloudflared URL changes on every restart: update `PUBLIC_BASE_URL` and the Callback URL each time.
