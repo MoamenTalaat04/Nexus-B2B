@@ -28,6 +28,7 @@ export const ADMIN_ROUTES = {
   admins: "/admin/admins",
   plans: "/admin/plans",
   billing: "/admin/billing",
+  llmProviders: "/admin/llm-providers",
   support: "/admin/support",
   supportDetail: (id: string) => `/admin/support/${id}`,
   security: "/admin/security",

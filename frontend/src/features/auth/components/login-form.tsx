@@ -12,18 +12,11 @@ import { Label } from "@/components/ui/label";
 import { AUTH_ROUTES, canAccessRoute, getDefaultRouteForRole } from "@/config/routes";
 import { useAuth } from "@/features/auth/auth-context";
 import { ApiError, api } from "@/lib/api";
-import { DEMO_CREDENTIALS, MockApiError } from "@/lib/mock-api";
+import { MockApiError } from "@/lib/mock-api";
 import { cn } from "@/lib/utils";
 
-const DEMO_ACCOUNTS = [
-  { label: "Super Admin", ...DEMO_CREDENTIALS.superAdmin },
-  { label: "Platform Admin", ...DEMO_CREDENTIALS.platformAdmin },
-  { label: "Customer 1", ...DEMO_CREDENTIALS.customer1 },
-  { label: "Customer 2", ...DEMO_CREDENTIALS.customer2 },
-] as const;
-
 function LoginFormInner({ className }: { className?: string }) {
-  const { login, user, isAuthenticated, isLoading, resetDemoData } = useAuth();
+  const { login, user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -102,12 +95,6 @@ function LoginFormInner({ className }: { className?: string }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Passkey sign-in was cancelled.");
     }
-  }
-
-  async function handleResetDemo() {
-    setError(null);
-    await resetDemoData();
-    setInfo("Mock database reset to initial seeded demo accounts.");
   }
 
   return (
@@ -229,38 +216,6 @@ function LoginFormInner({ className }: { className?: string }) {
                 <Fingerprint className="mr-2 size-4 text-primary dark:text-lime-400" />
                 Sign in with Passkey / Biometrics
               </Button>
-
-              {/* Development Demo Account Quick-Fill */}
-              <div className="rounded-xl border border-border/80 bg-surface/60 p-3 dark:border-[#223D27] dark:bg-[#0A140C]/80">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                    Demo Accounts (Dev)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleResetDemo}
-                    className="text-[11px] font-medium text-primary hover:underline dark:text-lime-300"
-                  >
-                    Reset mock DB
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {DEMO_ACCOUNTS.map((acc) => (
-                    <button
-                      key={acc.email}
-                      type="button"
-                      onClick={() => {
-                        setEmail(acc.email);
-                        setPassword(acc.password);
-                        setError(null);
-                      }}
-                      className="rounded-md border border-border bg-card px-2 py-1.5 text-left text-[11px] font-medium text-foreground transition-colors hover:border-primary/50 hover:bg-surface-secondary dark:border-[#223D27] dark:bg-[#112014] dark:text-lime-100 dark:hover:border-lime-400/50"
-                    >
-                      {acc.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               <div className="text-center text-xs text-muted-foreground dark:text-lime-200/75">
                 Don&apos;t have an account?{" "}

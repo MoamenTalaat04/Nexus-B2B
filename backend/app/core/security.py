@@ -210,9 +210,7 @@ async def auth0_verify_email_otp(*, email: str, otp: str) -> dict[str, Any]:
     if res.status_code >= 400:
         data = res.json() if res.content else {}
         msg = str(
-            data.get("error_description")
-            or data.get("message")
-            or "Invalid or expired verification code."
+            data.get("error_description") or data.get("message") or "Invalid or expired verification code."
         )
         raise AppError("invalid_otp", msg, status_code=400)
     return dict(res.json())

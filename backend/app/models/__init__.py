@@ -7,6 +7,7 @@ from app.models.base import Base, TenantMixin, TimestampMixin, UUIDPkMixin
 from app.models.icp import IcpVersion
 from app.models.knowledge import KnowledgeFile
 from app.models.leads import Contact, Lead, LeadNote, LeadOutcome, LeadStatusHistory, SearchQuery
+from app.models.llm_provider import LlmProviderConfig
 from app.models.messaging import ChannelConnection, Conversation, DemoRoute, Message, MessageTemplate
 from app.models.notifications import LearnedInsight, Notification
 from app.models.runs import AgentRun, AgentStep
@@ -28,6 +29,7 @@ __all__ = [
     "LeadOutcome",
     "LeadStatusHistory",
     "LearnedInsight",
+    "LlmProviderConfig",
     "Message",
     "MessageTemplate",
     "Notification",

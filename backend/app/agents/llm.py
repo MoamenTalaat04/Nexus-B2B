@@ -41,6 +41,7 @@ from app.agents.pricing import COSTS_ARE_ESTIMATES, cost_usd, price_for
 from app.config import settings
 from app.core.tracing import RunContext
 from app.models.enums import StepType
+from app.services.llm_registry import get_active_llm_targets
 
 logger = logging.getLogger("app.llm")
 
@@ -182,43 +183,63 @@ async def _complete(
     tools: list[dict[str, Any]] | None = None,
 ) -> LLMResult:
     """One model call with retries, the concurrency cap, an LLM_CALL step and the finish-reason check."""
-    model = _model_for(tier)
-    provider = get_llm_provider()
-    attempt = 0
-    while True:
-        started = time.perf_counter()
-        try:
-            async with _semaphore():
-                started = time.perf_counter()
-                result = await provider.complete(
+    db_targets = await get_active_llm_targets()
+    if db_targets:
+        candidates: list[tuple[Any, str]] = [
+            (t.provider, t.model_smart if tier == ModelTier.SMART else t.model_fast) for t in db_targets
+        ]
+    else:
+        candidates = [(get_llm_provider(), _model_for(tier))]
+
+    last_exc: LLMProviderError | None = None
+    for idx, (provider, model) in enumerate(candidates):
+        has_fallback = idx + 1 < len(candidates)
+        attempt = 0
+        while True:
+            started = time.perf_counter()
+            try:
+                async with _semaphore():
+                    started = time.perf_counter()
+                    result = await provider.complete(
+                        model=model,
+                        system=system,
+                        cached_context=cached_context,
+                        messages=messages,
+                        effort=effort,
+                        max_tokens=max_tokens,
+                        json_schema=json_schema,
+                        tools=tools,
+                    )
+                latency_ms = int((time.perf_counter() - started) * 1000)
+                last_exc = None
+                break
+            except LLMProviderError as exc:
+                last_exc = exc
+                if exc.retryable and attempt < MAX_RETRIES:
+                    delay = _backoff(attempt, exc.retry_after)
+                    attempt += 1
+                    logger.warning("llm %s: %s; retry %d/%d in %.1fs", name, exc, attempt, MAX_RETRIES, delay)
+                    await _sleep(delay)
+                    continue
+                if has_fallback:
+                    logger.warning(
+                        "llm %s failed on %s (%s); falling back to next provider", name, model, exc
+                    )
+                    break
+                await run.step(
+                    StepType.LLM_CALL,
+                    name,
+                    input={**step_input, "attempts": attempt + 1},
+                    output={"error": str(exc), "status_code": exc.status_code},
                     model=model,
-                    system=system,
-                    cached_context=cached_context,
-                    messages=messages,
-                    effort=effort,
-                    max_tokens=max_tokens,
-                    json_schema=json_schema,
-                    tools=tools,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                    lead_id=lead_id,
                 )
-            latency_ms = int((time.perf_counter() - started) * 1000)
+                raise
+        if last_exc is None:
             break
-        except LLMProviderError as exc:
-            if exc.retryable and attempt < MAX_RETRIES:
-                delay = _backoff(attempt, exc.retry_after)
-                attempt += 1
-                logger.warning("llm %s: %s; retry %d/%d in %.1fs", name, exc, attempt, MAX_RETRIES, delay)
-                await _sleep(delay)
-                continue
-            await run.step(
-                StepType.LLM_CALL,
-                name,
-                input={**step_input, "attempts": attempt + 1},
-                output={"error": str(exc), "status_code": exc.status_code},
-                model=model,
-                latency_ms=int((time.perf_counter() - started) * 1000),
-                lead_id=lead_id,
-            )
-            raise
+    if last_exc is not None:
+        raise last_exc
 
     priced_model = model if price_for(model) is not None else result.model
     cost = cost_usd(priced_model, result.usage)
