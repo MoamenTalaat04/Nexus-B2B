@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Suspense, type ReactNode, useState } from "react";
+import { Suspense, type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   Activity,
   BarChart3,
@@ -35,6 +35,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AUTH_ROUTES, CUSTOMER_ROUTES } from "@/config/routes";
 import { useAuth } from "@/features/auth/auth-context";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const CUSTOMER_NAV_ITEMS = [
@@ -52,9 +53,11 @@ const CUSTOMER_NAV_ITEMS = [
 function CustomerNavLinks({
   collapsed = false,
   onNavigate,
+  pendingOutreach = 0,
 }: {
   collapsed?: boolean;
   onNavigate?: () => void;
+  pendingOutreach?: number;
 }) {
   const pathname = usePathname();
 
@@ -62,8 +65,8 @@ function CustomerNavLinks({
     <nav aria-label="Customer portal navigation" className="space-y-1">
       {CUSTOMER_NAV_ITEMS.map((item) => {
         const Icon = item.icon;
-        const active =
-          item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const showBadge = item.href === CUSTOMER_ROUTES.outreach && pendingOutreach > 0;
         const link = (
           <Link
             key={item.href}
@@ -71,7 +74,7 @@ function CustomerNavLinks({
             onClick={onNavigate}
             aria-label={collapsed ? item.label : undefined}
             className={cn(
-              "flex items-center rounded-xl py-2.5 text-sm font-medium transition-all duration-200",
+              "relative flex items-center rounded-xl py-2.5 text-sm font-medium transition-all duration-200",
               collapsed ? "justify-center px-0" : "gap-3 px-3",
               active
                 ? "bg-primary/12 font-semibold text-primary dark:bg-lime-500/15 dark:text-lime-300"
@@ -79,7 +82,18 @@ function CustomerNavLinks({
             )}
           >
             <Icon className="size-4 shrink-0" />
-            {!collapsed && <span className="truncate">{item.label}</span>}
+            {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+            {showBadge && !collapsed && (
+              <Badge
+                variant="secondary"
+                className="ml-auto rounded-full bg-amber-500/20 px-1.5 py-0 text-[10px] font-bold text-amber-700 dark:text-amber-300"
+              >
+                {pendingOutreach}
+              </Badge>
+            )}
+            {showBadge && collapsed && (
+              <span className="absolute top-1.5 right-2 size-2 rounded-full bg-amber-500" />
+            )}
           </Link>
         );
 
@@ -101,8 +115,44 @@ function CustomerNavLinks({
 export function CustomerShell({ children }: { children: ReactNode }) {
   const { user, tenant, logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [pendingOutreach, setPendingOutreach] = useState(0);
+
+  const refreshOutreachBadge = useCallback(async () => {
+    try {
+      const res = await api.get<{ total: number }>("/outreach/queue", {
+        suppressUnauthorizedRedirect: true,
+      });
+      setPendingOutreach(res.total ?? 0);
+    } catch {
+      // Ignore badge fetch errors when offline or unauthenticated
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .get<{ total: number }>("/outreach/queue", {
+        suppressUnauthorizedRedirect: true,
+      })
+      .then((res) => {
+        if (active) setPendingOutreach(res.total ?? 0);
+      })
+      .catch(() => {
+        // Ignore badge fetch errors when offline or unauthenticated
+      });
+    return () => {
+      active = false;
+    };
+  }, [pathname]);
+
+  useEffect(() => {
+    const handler = () => void refreshOutreachBadge();
+    window.addEventListener("nexus:outreach-updated", handler);
+    return () => window.removeEventListener("nexus:outreach-updated", handler);
+  }, [refreshOutreachBadge]);
 
   async function handleLogout() {
     await logout();
@@ -128,7 +178,7 @@ export function CustomerShell({ children }: { children: ReactNode }) {
         </div>
         <div className="flex-1 overflow-y-auto px-3 py-4">
           <Suspense fallback={null}>
-            <CustomerNavLinks collapsed={collapsed} />
+            <CustomerNavLinks collapsed={collapsed} pendingOutreach={pendingOutreach} />
           </Suspense>
         </div>
         {tenant && !collapsed && (
@@ -169,7 +219,7 @@ export function CustomerShell({ children }: { children: ReactNode }) {
                   </SheetTitle>
                 </SheetHeader>
                 <div className="p-3">
-                  <CustomerNavLinks onNavigate={() => setMobileOpen(false)} />
+                  <CustomerNavLinks onNavigate={() => setMobileOpen(false)} pendingOutreach={pendingOutreach} />
                 </div>
               </SheetContent>
             </Sheet>

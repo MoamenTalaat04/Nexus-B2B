@@ -15,7 +15,7 @@ class LlmProviderCreate(BaseModel):
     base_url: str = Field(min_length=4, max_length=400)
     api_key: str = Field(min_length=1, max_length=500)
     model_smart: str = Field(min_length=1, max_length=200)
-    model_fast: str = Field(min_length=1, max_length=200)
+    model_fast: str = Field(default="", max_length=200)
     reasoning_models: str = Field(default="", max_length=400)
     priority: int = Field(default=1, ge=1, le=100)
     is_active: bool = True
@@ -63,4 +63,10 @@ class LlmProviderTestOut(BaseModel):
     status_code: int | None = None
     latency_ms: int
     models_count: int = 0
+    model_checked: str | None = None
+    reply_preview: str | None = None
     error: str | None = None
+
+
+class LlmProviderReorderIn(BaseModel):
+    ordered_ids: list[uuid.UUID]

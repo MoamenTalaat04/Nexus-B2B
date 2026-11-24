@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
 import { LoaderCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AUTH_ROUTES, getDefaultRouteForRole } from "@/config/routes";
+import { AUTH_ROUTES, CUSTOMER_ROUTES, getDefaultRouteForRole, isCustomerRole } from "@/config/routes";
 import { useAuth } from "@/features/auth/auth-context";
 import type { UserRole } from "@/lib/mock-api";
 
@@ -15,19 +15,34 @@ interface RouteGuardProps {
 }
 
 function RouteGuardInner({ allowedRoles, children }: RouteGuardProps) {
-  const { user, isLoading, isAuthenticated } = useAuth();
+  const { user, authProvider, onboardingCompleted, isLoading, isAuthenticated } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+
+  const mustCompleteOnboarding =
+    Boolean(user) &&
+    isCustomerRole(user!.role) &&
+    authProvider !== "mock" &&
+    !onboardingCompleted;
 
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
       const nextParam = pathname ? `?next=${encodeURIComponent(pathname)}` : "";
       router.replace(`${AUTH_ROUTES.login}${nextParam}`);
+      return;
     }
-  }, [isLoading, isAuthenticated, pathname, router]);
+    if (mustCompleteOnboarding && pathname !== CUSTOMER_ROUTES.onboarding) {
+      router.replace(CUSTOMER_ROUTES.onboarding);
+    }
+  }, [isLoading, isAuthenticated, mustCompleteOnboarding, pathname, router]);
 
-  if (isLoading || !isAuthenticated || !user) {
+  if (
+    isLoading ||
+    !isAuthenticated ||
+    !user ||
+    (mustCompleteOnboarding && pathname !== CUSTOMER_ROUTES.onboarding)
+  ) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
         <div className="flex items-center gap-2.5 text-sm font-medium">
@@ -75,4 +90,3 @@ export function RouteGuard(props: RouteGuardProps) {
     </Suspense>
   );
 }
-

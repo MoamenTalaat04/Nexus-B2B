@@ -5,9 +5,10 @@ import logging
 import shutil
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +16,13 @@ from app.config import settings
 from app.core.errors import AppError
 from app.core.security import CurrentUser, get_current_user
 from app.db import get_session
-from app.schemas.knowledge import KnowledgeFileListOut, KnowledgeFileOut
+from app.schemas.knowledge import (
+    KnowledgeFileDetailOut,
+    KnowledgeFileListOut,
+    KnowledgeFileOut,
+    KnowledgeFileUpdateIn,
+)
+from app.services.company_assist import KnowledgeDocType, generate_knowledge_doc_from_website
 from app.services.knowledge import (
     KnowledgeExtractionError,
     extract_knowledge_text,
@@ -140,6 +147,61 @@ def _to_out(row: Any) -> KnowledgeFileOut:
     )
 
 
+class KnowledgeAiGenerateIn(BaseModel):
+    doc_type: KnowledgeDocType
+    company_name: str = Field(default="", max_length=200)
+    website: str | None = Field(default=None, max_length=300)
+    description: str = Field(default="", max_length=4000)
+    ideal_customer_text: str = Field(default="", max_length=4000)
+
+
+@router.post("/ai-generate", response_model=KnowledgeFileOut, status_code=201)
+async def ai_generate_knowledge_file(
+    body: KnowledgeAiGenerateIn,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> KnowledgeFileOut:
+    count = await _count_tenant_files(session, user.tenant_id)
+    if count >= MAX_TENANT_FILES:
+        raise AppError(
+            "knowledge_file_limit_reached",
+            "This tenant has reached the 20-file Knowledge limit.",
+            status_code=409,
+        )
+
+    filename, markdown_content = await generate_knowledge_doc_from_website(
+        tenant_id=user.tenant_id,
+        doc_type=body.doc_type,
+        company_name=body.company_name,
+        website=body.website,
+        description=body.description,
+        ideal_customer_text=body.ideal_customer_text,
+    )
+
+    tenant_dir = Path(settings.UPLOAD_DIR) / str(user.tenant_id)
+    tenant_dir.mkdir(parents=True, exist_ok=True)
+    final_path = tenant_dir / f"{uuid.uuid4()}_{filename}"
+    encoded = markdown_content.encode("utf-8")
+    await asyncio.to_thread(final_path.write_bytes, encoded)
+
+    knowledge_model = _knowledge_model()
+    row = knowledge_model(
+        tenant_id=user.tenant_id,
+        filename=filename,
+        mime_type="text/markdown",
+        size_bytes=len(encoded),
+        storage_path=str(final_path),
+        extracted_text=markdown_content,
+        char_count=len(markdown_content),
+        status="ready",
+        error=None,
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _to_out(row)
+
+
 @router.post("", response_model=KnowledgeFileOut, status_code=201)
 async def upload_knowledge(
     file: UploadFile = File(...),
@@ -250,6 +312,66 @@ async def list_knowledge(
 ) -> KnowledgeFileListOut:
     rows = await _list_tenant_files(session, user.tenant_id)
     return KnowledgeFileListOut(items=[_to_out(row) for row in rows], total=len(rows))
+
+
+def _is_editable_file(filename: str) -> bool:
+    return Path(filename).suffix.lower() in {".md", ".txt"}
+
+
+@router.get("/{file_id}", response_model=KnowledgeFileDetailOut)
+async def get_knowledge_detail(
+    file_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> KnowledgeFileDetailOut:
+    row = await _find_tenant_file(session, user.tenant_id, file_id)
+    if row is None:
+        raise AppError("knowledge_file_not_found", "Knowledge file not found.", status_code=404)
+    base = _to_out(row)
+    return KnowledgeFileDetailOut(
+        **base.model_dump(),
+        content=row.extracted_text or "",
+        editable=_is_editable_file(row.filename),
+    )
+
+
+@router.put("/{file_id}", response_model=KnowledgeFileDetailOut)
+async def update_knowledge_content(
+    file_id: uuid.UUID,
+    body: KnowledgeFileUpdateIn,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> KnowledgeFileDetailOut:
+    row = await _find_tenant_file(session, user.tenant_id, file_id)
+    if row is None:
+        raise AppError("knowledge_file_not_found", "Knowledge file not found.", status_code=404)
+    if not _is_editable_file(row.filename):
+        raise AppError(
+            "knowledge_file_not_editable",
+            "Only Markdown (.md) and plain text (.txt) files can be edited.",
+            status_code=422,
+        )
+
+    normalized = body.content.replace("\r\n", "\n").replace("\r", "\n")
+    encoded = normalized.encode("utf-8")
+    stored_path = Path(str(row.storage_path))
+    stored_path.parent.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(stored_path.write_bytes, encoded)
+
+    row.extracted_text = normalized
+    row.char_count = len(normalized)
+    row.size_bytes = len(encoded)
+    row.status = "ready"
+    row.error = None
+    await session.commit()
+    await session.refresh(row)
+
+    base = _to_out(row)
+    return KnowledgeFileDetailOut(
+        **base.model_dump(),
+        content=normalized,
+        editable=True,
+    )
 
 
 @router.delete("/{file_id}", status_code=204)

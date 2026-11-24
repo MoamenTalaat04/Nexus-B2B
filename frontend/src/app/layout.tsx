@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
+import { Pointer } from "@/components/ui/pointer";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" suppressHydrationWarning className={`${manrope.variable} h-full`}>
       <body className="min-h-full flex flex-col">
+        <Pointer className="fill-primary stroke-white text-primary dark:fill-lime-400 dark:stroke-[#0A140C] dark:text-lime-400" />
         <Providers>{children}</Providers>
       </body>
     </html>

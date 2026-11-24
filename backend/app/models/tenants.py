@@ -49,7 +49,6 @@ class User(UUIDPkMixin, TimestampMixin, TenantMixin, Base):
 class BusinessSettings(UUIDPkMixin, TimestampMixin, Base):
     __tablename__ = "business_settings"
     __table_args__ = (
-        enum_check("language", ("ar-EG", "en")),
         enum_check("tone", ("friendly", "formal")),
         enum_check("autonomy_mode", AutonomyMode),
         enum_check("first_touch_mode", FirstTouchMode),

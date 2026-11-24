@@ -44,13 +44,13 @@ describe("NEXUS Mock Auth, RBAC, and Multi-Tenant Isolation", () => {
     const cust1Res = await login(DEMO_CREDENTIALS.customer1.email, DEMO_CREDENTIALS.customer1.password);
     expect(cust1Res.user.role).toBe("tenant_owner");
     expect(cust1Res.user.tenantId).toBe("tenant_001");
-    expect(getDefaultRouteForRole(cust1Res.user.role)).toBe("/");
+    expect(getDefaultRouteForRole(cust1Res.user.role)).toBe("/dashboard");
     await logout();
 
     const cust2Res = await login(DEMO_CREDENTIALS.customer2.email, DEMO_CREDENTIALS.customer2.password);
     expect(cust2Res.user.role).toBe("tenant_owner");
     expect(cust2Res.user.tenantId).toBe("tenant_002");
-    expect(getDefaultRouteForRole(cust2Res.user.role)).toBe("/");
+    expect(getDefaultRouteForRole(cust2Res.user.role)).toBe("/dashboard");
   });
 
   it("enforces public registration as tenant_owner only and creates an isolated tenant", async () => {

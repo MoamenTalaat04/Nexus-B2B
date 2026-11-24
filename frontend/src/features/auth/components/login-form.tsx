@@ -9,14 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AUTH_ROUTES, canAccessRoute, getDefaultRouteForRole } from "@/config/routes";
+import { AUTH_ROUTES, CUSTOMER_ROUTES, canAccessRoute, getDefaultRouteForRole, isCustomerRole } from "@/config/routes";
 import { useAuth } from "@/features/auth/auth-context";
 import { ApiError, api } from "@/lib/api";
 import { MockApiError } from "@/lib/mock-api";
 import { cn } from "@/lib/utils";
 
 function LoginFormInner({ className }: { className?: string }) {
-  const { login, user, isAuthenticated, isLoading } = useAuth();
+  const { login, user, authProvider, onboardingCompleted, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -29,11 +29,15 @@ function LoginFormInner({ className }: { className?: string }) {
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || !user) return;
+    if (isCustomerRole(user.role) && authProvider !== "mock" && !onboardingCompleted) {
+      router.replace(CUSTOMER_ROUTES.onboarding);
+      return;
+    }
     const nextPath = searchParams.get("next");
     const target =
       nextPath && canAccessRoute(user.role, nextPath) ? nextPath : getDefaultRouteForRole(user.role);
     router.replace(target);
-  }, [isLoading, isAuthenticated, user, router, searchParams]);
+  }, [isLoading, isAuthenticated, user, authProvider, onboardingCompleted, router, searchParams]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -243,8 +247,8 @@ function LoginFormInner({ className }: { className?: string }) {
       </Card>
 
       <div className="px-6 text-center text-xs text-balance text-muted-foreground dark:text-lime-200/60 [&_a]:underline [&_a]:underline-offset-4 [&_a]:hover:text-foreground dark:[&_a]:hover:text-lime-200">
-        By clicking continue, you agree to our <Link href="/#footer">Terms of Service</Link> and{" "}
-        <Link href="/#footer">Privacy Policy</Link>.
+        By clicking continue, you agree to our <Link href="/landing-page#footer">Terms of Service</Link> and{" "}
+        <Link href="/landing-page#footer">Privacy Policy</Link>.
       </div>
     </div>
   );

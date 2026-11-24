@@ -7,7 +7,7 @@ export const AUTH_ROUTES = {
 } as const;
 
 export const CUSTOMER_ROUTES = {
-  dashboard: "/",
+  dashboard: "/dashboard",
   onboarding: "/onboarding",
   icp: "/icp",
   leads: "/leads",
@@ -29,6 +29,7 @@ export const ADMIN_ROUTES = {
   plans: "/admin/plans",
   billing: "/admin/billing",
   llmProviders: "/admin/llm-providers",
+  searchSources: "/admin/search-sources",
   support: "/admin/support",
   supportDetail: (id: string) => `/admin/support/${id}`,
   security: "/admin/security",

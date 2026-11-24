@@ -95,6 +95,16 @@ class MarkSentIn(BaseModel):
     body: str | None = None  # the final text, if the owner edited it before sending
 
 
+class SimulateInboundIn(BaseModel):
+    lead_id: uuid.UUID
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class SimulateInboundOut(BaseModel):
+    inbound_message_id: uuid.UUID
+    pipeline: dict[str, Any]
+
+
 # ---------------------------------------------------------------------------------------------- helpers
 
 
@@ -321,3 +331,67 @@ async def mark_sent(
     lead = await session.get(Lead, message.lead_id)
     assert lead is not None
     return OutreachItem(**_item(message, lead, None, None))
+
+
+@router.post("/simulate-inbound", response_model=SimulateInboundOut, status_code=201)
+async def simulate_inbound_reply(
+    body: SimulateInboundIn,
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SimulateInboundOut:
+    """Demo/testing helper: simulate an inbound lead reply and run the Reply Agent pipeline."""
+    from datetime import timedelta
+
+    from app.core import lead_state
+    from app.models.enums import ChannelType, LeadStatus, MessageAuthor, MessageDirection, MessageKind
+    from app.models.messaging import Conversation
+    from app.workers.jobs.inbound import process_inbound_message
+
+    lead = (
+        await session.execute(select(Lead).where(Lead.id == body.lead_id, Lead.tenant_id == user.tenant_id))
+    ).scalar_one_or_none()
+    if lead is None:
+        raise AppError("not_found", "Lead not found.", status_code=404)
+
+    conv = (
+        await session.execute(
+            select(Conversation).where(Conversation.lead_id == lead.id, Conversation.tenant_id == user.tenant_id)
+        )
+    ).scalar_one_or_none()
+    now = datetime.now(UTC)
+    if conv is None:
+        conv = Conversation(
+            tenant_id=user.tenant_id,
+            lead_id=lead.id,
+            channel=ChannelType.WHATSAPP.value,
+            contact_value="simulated",
+            window_expires_at=now + timedelta(hours=24),
+        )
+        session.add(conv)
+        await session.flush()
+    else:
+        conv.window_expires_at = now + timedelta(hours=24)
+
+    inbound_msg = Message(
+        tenant_id=user.tenant_id,
+        conversation_id=conv.id,
+        lead_id=lead.id,
+        direction=MessageDirection.INBOUND.value,
+        channel=ChannelType.WHATSAPP.value,
+        author=MessageAuthor.LEAD.value,
+        kind=MessageKind.TEXT.value,
+        body=body.text.strip(),
+        status=MessageStatus.RECEIVED.value,
+        provider_message_id=f"sim:{uuid.uuid4()}",
+        sent_at=now,
+    )
+    session.add(inbound_msg)
+    lead.last_inbound_at = now
+    current = LeadStatus(lead.status)
+    if current != LeadStatus.REPLIED and lead_state.is_allowed(current, LeadStatus.REPLIED):
+        await lead_state.transition(session, lead, LeadStatus.REPLIED, reason="simulated inbound", actor="user")
+    await session.commit()
+    await session.refresh(inbound_msg)
+
+    pipeline_result = await process_inbound_message(inbound_msg.id)
+    return SimulateInboundOut(inbound_message_id=inbound_msg.id, pipeline=pipeline_result)

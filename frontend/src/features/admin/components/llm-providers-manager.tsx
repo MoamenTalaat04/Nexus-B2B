@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ArrowDown, ArrowUp, CheckCircle2, Cpu, Plus, Star, Trash2, Zap } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Reorder } from "motion/react";
+import { ArrowDown, ArrowUp, CheckCircle2, Cpu, GripVertical, Pencil, Plus, Star, Trash2, X, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,8 @@ interface LlmProviderTestOut {
   status_code: number | null;
   latency_ms: number;
   models_count: number;
+  model_checked?: string | null;
+  reply_preview?: string | null;
   error: string | null;
 }
 
@@ -66,8 +69,8 @@ const PRESETS: Record<
   colab_vllm: {
     name: "Google Colab (Qwen vLLM)",
     baseUrl: "https://your-tunnel.trycloudflare.com/v1",
-    modelSmart: "Qwen/Qwen2.5-14B-Instruct-AWQ",
-    modelFast: "Qwen/Qwen2.5-14B-Instruct-AWQ",
+    modelSmart: "qwen",
+    modelFast: "qwen",
   },
   custom: {
     name: "Custom OpenAI-Compatible",
@@ -85,6 +88,8 @@ export function LlmProvidersManager() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const latestProvidersRef = useRef<LlmProviderItem[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,6 +101,14 @@ export function LlmProvidersManager() {
   const [modelFast, setModelFast] = useState(PRESETS.groq.modelFast);
   const [priority, setPriority] = useState(2);
   const [isPrimary, setIsPrimary] = useState(false);
+
+  const [editingItem, setEditingItem] = useState<LlmProviderItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editBaseUrl, setEditBaseUrl] = useState("");
+  const [editApiKey, setEditApiKey] = useState("");
+  const [editModelSmart, setEditModelSmart] = useState("");
+  const [editModelFast, setEditModelFast] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const adminHeaders = { "X-Admin-Role": user?.role ?? "" };
 
@@ -145,7 +158,7 @@ export function LlmProvidersManager() {
           base_url: baseUrl.trim(),
           api_key: apiKey.trim(),
           model_smart: modelSmart.trim(),
-          model_fast: modelFast.trim(),
+          model_fast: modelFast.trim() || modelSmart.trim(),
           priority: Number(priority),
           is_active: true,
           is_primary: isPrimary,
@@ -192,17 +205,49 @@ export function LlmProvidersManager() {
     }
   }
 
-  async function handleChangePriority(item: LlmProviderItem, delta: number) {
-    const nextPriority = Math.max(1, item.priority + delta);
+  async function persistOrder(nextList: LlmProviderItem[]) {
+    const reindexed = nextList.map((item, idx) => ({
+      ...item,
+      priority: idx + 1,
+      is_primary: idx === 0,
+    }));
+    setProviders(reindexed);
     try {
-      await api.put(
-        `/admin/llm-providers/${item.id}`,
-        { priority: nextPriority },
+      const res = await api.post<LlmProviderListOut>(
+        "/admin/llm-providers/reorder",
+        { ordered_ids: reindexed.map((item) => item.id) },
         { headers: adminHeaders, suppressUnauthorizedRedirect: true },
       );
-      await loadProviders();
+      setProviders(res.items);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update priority.");
+      setError(err instanceof ApiError ? err.message : "Could not save new priority order.");
+      await loadProviders();
+    }
+  }
+
+  async function handleMove(index: number, delta: number) {
+    const targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= providers.length) return;
+    const next = [...providers];
+    const [moved] = next.splice(index, 1);
+    next.splice(targetIndex, 0, moved);
+    await persistOrder(next);
+  }
+
+  function handleReorder(nextList: LlmProviderItem[]) {
+    const reindexed = nextList.map((item, idx) => ({
+      ...item,
+      priority: idx + 1,
+      is_primary: idx === 0,
+    }));
+    latestProvidersRef.current = reindexed;
+    setProviders(reindexed);
+  }
+
+  async function handleDragEnd() {
+    setDraggedId(null);
+    if (latestProvidersRef.current.length > 0) {
+      await persistOrder(latestProvidersRef.current);
     }
   }
 
@@ -217,8 +262,9 @@ export function LlmProvidersManager() {
         { headers: adminHeaders, suppressUnauthorizedRedirect: true },
       );
       if (res.ok) {
+        const replyNote = res.reply_preview ? ` · ${res.model_checked ?? item.model_smart} replied: "${res.reply_preview}"` : "";
         setMessage(
-          `Connection to "${item.name}" succeeded in ${res.latency_ms} ms (${res.models_count} models available).`,
+          `Connection to "${item.name}" succeeded in ${res.latency_ms} ms (${res.models_count} models)${replyNote}.`,
         );
       } else {
         setError(`Connection to "${item.name}" failed: ${res.error ?? `HTTP ${res.status_code}`}`);
@@ -227,6 +273,46 @@ export function LlmProvidersManager() {
       setError(err instanceof ApiError ? err.message : "Test request failed.");
     } finally {
       setTestingId(null);
+    }
+  }
+
+  function openEditModal(item: LlmProviderItem) {
+    setEditingItem(item);
+    setEditName(item.name);
+    setEditBaseUrl(item.base_url);
+    setEditApiKey("");
+    setEditModelSmart(item.model_smart);
+    setEditModelFast(item.model_fast);
+    setError(null);
+    setMessage(null);
+  }
+
+  async function handleSaveEdit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingItem) return;
+    setEditSaving(true);
+    setError(null);
+    try {
+      const payload: Record<string, string> = {
+        name: editName.trim(),
+        base_url: editBaseUrl.trim(),
+        model_smart: editModelSmart.trim(),
+        model_fast: editModelFast.trim() || editModelSmart.trim(),
+      };
+      if (editApiKey.trim()) {
+        payload.api_key = editApiKey.trim();
+      }
+      await api.put(`/admin/llm-providers/${editingItem.id}`, payload, {
+        headers: adminHeaders,
+        suppressUnauthorizedRedirect: true,
+      });
+      setMessage(`Updated provider "${editName.trim()}".`);
+      setEditingItem(null);
+      await loadProviders();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update provider.");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -290,95 +376,144 @@ export function LlmProvidersManager() {
           ) : providers.length === 0 ? (
             <p className="text-xs text-muted-foreground">No providers configured yet.</p>
           ) : (
-            providers.map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-col gap-3 rounded-xl border border-border/80 bg-surface/50 p-4 sm:flex-row sm:items-center sm:justify-between dark:border-[#223D27] dark:bg-[#0A140C]/60"
-              >
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-foreground">{item.name}</span>
-                    <Badge variant="outline">Priority #{item.priority}</Badge>
-                    {item.is_primary && (
-                      <Badge className="bg-gradient-to-r from-[#10B981] to-[#84CC16] text-[#0A140C]">
-                        <Star className="mr-1 size-3" />
-                        Primary
-                      </Badge>
-                    )}
-                    <Badge variant={item.is_active ? "default" : "secondary"}>
-                      {item.is_active ? "Active" : "Disabled"}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    URL: <span className="font-mono">{item.base_url}</span> · Key:{" "}
-                    <span className="font-mono">{item.api_key_masked}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Smart: <span className="font-mono text-foreground">{item.model_smart}</span> · Fast:{" "}
-                    <span className="font-mono text-foreground">{item.model_fast}</span>
-                  </p>
-                </div>
+            <Reorder.Group
+              axis="y"
+              values={providers}
+              onReorder={handleReorder}
+              className="space-y-3"
+            >
+              {providers.map((item, index) => {
+                const isDragging = draggedId === item.id;
+                return (
+                  <Reorder.Item
+                    key={item.id}
+                    value={item}
+                    layout
+                    transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                    onDragStart={() => {
+                      latestProvidersRef.current = providers;
+                      setDraggedId(item.id);
+                    }}
+                    onDragEnd={() => {
+                      void handleDragEnd();
+                    }}
+                    whileDrag={{
+                      scale: 1.015,
+                      zIndex: 50,
+                    }}
+                    className={`relative flex cursor-grab flex-col gap-3 rounded-xl p-4 select-none active:cursor-grabbing sm:flex-row sm:items-center sm:justify-between ${isDragging
+                      ? "z-50 border-2 border-emerald-500 bg-card opacity-100 ring-2 ring-emerald-500/30 shadow-[0_12px_30px_rgba(16,185,129,0.28)] dark:border-lime-400 dark:bg-[#112014] dark:ring-lime-400/30 dark:shadow-[0_12px_30px_rgba(132,204,22,0.24)]"
+                      : "border border-border/80 bg-surface/50 dark:border-[#223D27] dark:bg-[#0A140C]/60"
+                      }`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <span
+                        title="Drag to reorder"
+                        className="mt-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <GripVertical className="size-4" />
+                      </span>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-foreground">{item.name}</span>
+                          <Badge variant="outline">Priority #{index + 1}</Badge>
+                          {item.is_primary && (
+                            <Badge className="bg-gradient-to-r from-[#10B981] to-[#84CC16] text-[#0A140C]">
+                              <Star className="mr-1 size-3" />
+                              Primary
+                            </Badge>
+                          )}
+                          <Badge variant={item.is_active ? "default" : "secondary"}>
+                            {item.is_active ? "Active" : "Disabled"}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          URL: <span className="font-mono">{item.base_url}</span> · Key:{" "}
+                          <span className="font-mono">{item.api_key_masked}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Smart: <span className="font-mono text-foreground">{item.model_smart}</span> · Fast:{" "}
+                          <span className="font-mono text-foreground">{item.model_fast}</span>
+                        </p>
+                      </div>
+                    </div>
 
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={testingId === item.id}
-                    onClick={() => void handleTest(item)}
-                  >
-                    <Zap className="mr-1 size-3.5" />
-                    {testingId === item.id ? "Testing..." : "Test"}
-                  </Button>
-                  {!item.is_primary && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void handleSetPrimary(item.id)}
+                    <div
+                      className="flex flex-wrap items-center gap-1.5"
+                      onPointerDown={(e) => e.stopPropagation()}
                     >
-                      <CheckCircle2 className="mr-1 size-3.5" />
-                      Set Primary
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    title="Higher priority"
-                    onClick={() => void handleChangePriority(item, -1)}
-                  >
-                    <ArrowUp className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    title="Lower priority"
-                    onClick={() => void handleChangePriority(item, 1)}
-                  >
-                    <ArrowDown className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void handleToggleActive(item)}
-                  >
-                    {item.is_active ? "Disable" : "Enable"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => void handleDelete(item.id)}
-                    className="text-muted-foreground hover:text-red-600"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              </div>
-            ))
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={testingId === item.id}
+                        onClick={() => void handleTest(item)}
+                      >
+                        <Zap className="mr-1 size-3.5" />
+                        {testingId === item.id ? "Testing..." : "Test"}
+                      </Button>
+                      {!item.is_primary && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleSetPrimary(item.id)}
+                        >
+                          <CheckCircle2 className="mr-1 size-3.5" />
+                          Set Primary
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        title="Higher priority"
+                        disabled={index === 0}
+                        onClick={() => void handleMove(index, -1)}
+                      >
+                        <ArrowUp className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        title="Lower priority"
+                        disabled={index === providers.length - 1}
+                        onClick={() => void handleMove(index, 1)}
+                      >
+                        <ArrowDown className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void handleToggleActive(item)}
+                      >
+                        {item.is_active ? "Disable" : "Enable"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        title="Edit provider"
+                        onClick={() => openEditModal(item)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => void handleDelete(item.id)}
+                        className="text-muted-foreground hover:text-red-600"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </Reorder.Item>
+                );
+              })}
+            </Reorder.Group>
           )}
         </CardContent>
       </Card>
@@ -440,24 +575,33 @@ export function LlmProvidersManager() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="llm-smart">Smart Model *</Label>
+                <Label htmlFor="llm-smart">Model Identifier (Smart) *</Label>
                 <Input
                   id="llm-smart"
                   required
+                  placeholder="e.g. qwen or gpt-4o"
                   value={modelSmart}
                   onChange={(e) => setModelSmart(e.target.value)}
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="llm-fast">Fast Model *</Label>
+                <Label htmlFor="llm-fast">Fast Model (optional)</Label>
                 <Input
                   id="llm-fast"
-                  required
+                  placeholder="Defaults to Smart model"
                   value={modelFast}
                   onChange={(e) => setModelFast(e.target.value)}
                 />
               </div>
             </div>
+
+            {(providerType === "colab_vllm" || providerType === "custom") && (
+              <p className="rounded-lg border border-border/70 bg-surface/50 px-3 py-2 text-xs text-muted-foreground dark:border-[#223D27] dark:bg-[#0A140C]/60">
+                Uses non-streaming OpenAI-compatible Chat Completions (<code className="font-mono">stream: false</code>).
+                Temporary Cloudflare Quick Tunnel URLs expire when a Colab session restarts — use Edit on the provider card
+                to paste the new URL.
+              </p>
+            )}
 
             <div className="flex flex-wrap items-center gap-4">
               <div className="grid w-32 gap-1.5">
@@ -489,6 +633,84 @@ export function LlmProvidersManager() {
           </form>
         </CardContent>
       </Card>
+
+      {editingItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setEditingItem(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg rounded-2xl border border-border bg-card p-5 shadow-2xl dark:border-[#223D27] dark:bg-[#112014]"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">Edit Provider: {editingItem.name}</h3>
+              <Button type="button" size="icon-sm" variant="ghost" onClick={() => setEditingItem(null)}>
+                <X className="size-4" />
+              </Button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="space-y-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="edit-llm-name">Display Name *</Label>
+                <Input
+                  id="edit-llm-name"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="edit-llm-url">Base URL *</Label>
+                <Input
+                  id="edit-llm-url"
+                  required
+                  value={editBaseUrl}
+                  onChange={(e) => setEditBaseUrl(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="edit-llm-key">New API Key (leave blank to keep existing)</Label>
+                <Input
+                  id="edit-llm-key"
+                  type="password"
+                  placeholder={editingItem.api_key_masked}
+                  value={editApiKey}
+                  onChange={(e) => setEditApiKey(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-llm-smart">Model Identifier (Smart) *</Label>
+                  <Input
+                    id="edit-llm-smart"
+                    required
+                    value={editModelSmart}
+                    onChange={(e) => setEditModelSmart(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="edit-llm-fast">Fast Model</Label>
+                  <Input
+                    id="edit-llm-fast"
+                    value={editModelFast}
+                    onChange={(e) => setEditModelFast(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setEditingItem(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={editSaving}>
+                  {editSaving ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

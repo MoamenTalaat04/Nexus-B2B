@@ -23,3 +23,12 @@ class KnowledgeFileOut(BaseModel):
 class KnowledgeFileListOut(BaseModel):
     items: list[KnowledgeFileOut] = Field(default_factory=list)
     total: int = 0
+
+
+class KnowledgeFileDetailOut(KnowledgeFileOut):
+    content: str = ""
+    editable: bool = False
+
+
+class KnowledgeFileUpdateIn(BaseModel):
+    content: str = Field(max_length=200_000)

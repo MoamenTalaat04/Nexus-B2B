@@ -312,7 +312,14 @@ async def oauth_callback(
         await session.commit()
 
     token = create_access_token(user_id=user.id, tenant_id=user.tenant_id, role=user.role)
-    redirect_target = f"{settings.FRONTEND_ORIGIN.rstrip('/')}/"
+    origin = settings.FRONTEND_ORIGIN.rstrip("/")
+    if user.role in ("super_admin", "platform_admin"):
+        redirect_target = f"{origin}/admin"
+    else:
+        biz_settings = await get_settings_for(session, user.tenant_id)
+        redirect_target = (
+            f"{origin}/dashboard" if biz_settings.onboarding_completed else f"{origin}/onboarding"
+        )
     resp = RedirectResponse(url=redirect_target, status_code=302)
     set_auth_cookie(resp, token)
     return resp

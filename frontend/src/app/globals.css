@@ -132,3 +132,10 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+@media (pointer: fine) {
+  [data-custom-pointer="true"],
+  [data-custom-pointer="true"] * {
+    cursor: none !important;
+  }
+}

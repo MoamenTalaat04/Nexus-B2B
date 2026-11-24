@@ -7,6 +7,7 @@ Errors: 400 onboarding_incomplete, 400 no_active_icp, 409 sourcing_already_runni
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Body, Depends
 from pydantic import BaseModel, Field
@@ -33,6 +34,7 @@ STALE_AFTER = timedelta(hours=2)
 
 class SourcingIn(BaseModel):
     max_results: int | None = Field(default=None, ge=1, le=200)
+    mode: Literal["live", "sandbox"] = "live"
 
 
 class RunStartedOut(BaseModel):
@@ -64,14 +66,24 @@ async def start_sourcing(
         raise AppError("sourcing_already_running", "The agent is already looking for leads.", 409)
 
     max_results = (body.max_results if body else None) or settings.daily_new_leads_target
+    mode = body.mode if body else "live"
     run_id = await create_queued_run(
-        session, user.tenant_id, AgentRunKind.SOURCING, trigger="manual", input={"max_results": max_results}
+        session,
+        user.tenant_id,
+        AgentRunKind.SOURCING,
+        trigger="manual",
+        input={"max_results": max_results, "mode": mode},
     )
     await session.commit()
     try:
-        await enqueue(
-            "job_run_sourcing", tenant_id=str(user.tenant_id), max_results=max_results, run_id=str(run_id)
-        )
+        enqueue_kwargs: dict[str, object] = {
+            "tenant_id": str(user.tenant_id),
+            "max_results": max_results,
+            "run_id": str(run_id),
+        }
+        if mode == "sandbox":
+            enqueue_kwargs["mode"] = "sandbox"
+        await enqueue("job_run_sourcing", **enqueue_kwargs)
     except Exception as exc:
         logger.exception("could not enqueue job_run_sourcing")
         run = await session.get(AgentRun, run_id)

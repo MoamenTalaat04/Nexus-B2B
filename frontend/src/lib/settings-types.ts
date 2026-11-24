@@ -1,6 +1,7 @@
 import type { AutonomyMode, FirstTouchMode, OutreachPurpose } from "@/lib/types";
 
 export interface ProductIn {
+  kind?: "product" | "service";
   name: string;
   description: string;
   price_range?: string | null;
@@ -8,8 +9,12 @@ export interface ProductIn {
 }
 
 export interface RegionIn {
+  country?: string;
   governorate: string;
   cities: string[];
+  lat?: number | null;
+  lng?: number | null;
+  radius_km?: number | null;
 }
 
 export interface SequenceStepIn {
@@ -25,7 +30,7 @@ export interface SettingsOut {
   ideal_customer_text: string;
   products: ProductIn[];
   target_regions: RegionIn[];
-  language: "ar-EG" | "en";
+  language: string;
   tone: "friendly" | "formal";
   allowed_offers: string;
   max_discount_percent: number;

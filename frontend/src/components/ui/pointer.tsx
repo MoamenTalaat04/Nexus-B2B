@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { createPortal } from "react-dom"
 import {
   AnimatePresence,
   motion,
@@ -27,6 +28,11 @@ export function Pointer({
   const x = useMotionValue(0)
   const y = useMotionValue(0)
   const [isActive, setIsActive] = useState<boolean>(false)
+  const isClient = useSyncExternalStore(
+    () => () => { },
+    () => true,
+    () => false
+  )
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -35,85 +41,94 @@ export function Pointer({
         ? (containerRef.current?.parentElement ?? null)
         : null
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return
       x.set(e.clientX)
       y.set(e.clientY)
       setIsActive(true)
     }
 
-    const handleMouseEnter = (e: MouseEvent) => {
+    const handlePointerEnter = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return
       x.set(e.clientX)
       y.set(e.clientY)
       setIsActive(true)
     }
 
-    const handleMouseLeave = () => {
+    const handlePointerLeave = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return
       setIsActive(false)
     }
 
     if (parentElement) {
       parentElement.style.cursor = "none"
-      parentElement.addEventListener("mousemove", handleMouseMove)
-      parentElement.addEventListener("mouseenter", handleMouseEnter)
-      parentElement.addEventListener("mouseleave", handleMouseLeave)
+      parentElement.dataset.customPointer = "true"
+      parentElement.addEventListener("pointermove", handlePointerMove)
+      parentElement.addEventListener("pointerenter", handlePointerEnter)
+      parentElement.addEventListener("pointerleave", handlePointerLeave)
     }
 
     return () => {
       if (parentElement) {
         parentElement.style.cursor = ""
-        parentElement.removeEventListener("mousemove", handleMouseMove)
-        parentElement.removeEventListener("mouseenter", handleMouseEnter)
-        parentElement.removeEventListener("mouseleave", handleMouseLeave)
+        delete parentElement.dataset.customPointer
+        parentElement.removeEventListener("pointermove", handlePointerMove)
+        parentElement.removeEventListener("pointerenter", handlePointerEnter)
+        parentElement.removeEventListener("pointerleave", handlePointerLeave)
       }
     }
   }, [x, y])
 
+  const pointerOverlay = (
+    <AnimatePresence>
+      {isActive && (
+        <motion.div
+          className="pointer-events-none fixed z-[99999] transform-[translate(-50%,-50%)]"
+          style={{
+            top: y,
+            left: x,
+            ...style,
+          }}
+          initial={{
+            scale: 0,
+            opacity: 0,
+          }}
+          animate={{
+            scale: 1,
+            opacity: 1,
+          }}
+          exit={{
+            scale: 0,
+            opacity: 0,
+          }}
+          {...props}
+        >
+          {children || (
+            <svg
+              stroke="currentColor"
+              fill="currentColor"
+              strokeWidth="1"
+              viewBox="0 0 16 16"
+              height="24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+              className={cn(
+                "rotate-[-70deg] stroke-white text-black",
+                className
+              )}
+            >
+              <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
+            </svg>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
   return (
     <>
       <div ref={containerRef} />
-      <AnimatePresence>
-        {isActive && (
-          <motion.div
-            className="pointer-events-none fixed z-50 transform-[translate(-50%,-50%)]"
-            style={{
-              top: y,
-              left: x,
-              ...style,
-            }}
-            initial={{
-              scale: 0,
-              opacity: 0,
-            }}
-            animate={{
-              scale: 1,
-              opacity: 1,
-            }}
-            exit={{
-              scale: 0,
-              opacity: 0,
-            }}
-            {...props}
-          >
-            {children || (
-              <svg
-                stroke="currentColor"
-                fill="currentColor"
-                strokeWidth="1"
-                viewBox="0 0 16 16"
-                height="24"
-                width="24"
-                xmlns="http://www.w3.org/2000/svg"
-                className={cn(
-                  "rotate-[-70deg] stroke-white text-black",
-                  className
-                )}
-              >
-                <path d="M14.082 2.182a.5.5 0 0 1 .103.557L8.528 15.467a.5.5 0 0 1-.917-.007L5.57 10.694.803 8.652a.5.5 0 0 1-.006-.916l12.728-5.657a.5.5 0 0 1 .556.103z" />
-              </svg>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isClient ? createPortal(pointerOverlay, document.body) : null}
     </>
   )
 }

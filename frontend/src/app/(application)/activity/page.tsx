@@ -1,8 +1,5 @@
-export default function ActivityPage() {
-  return (
-    <div className="space-y-1">
-      <h1 className="text-xl font-bold tracking-tight text-foreground">Agent Activity</h1>
-    </div>
-  );
-}
+import { ActivityList } from "@/features/activity/components/activity-list";
 
+export default function ActivityPage() {
+  return <ActivityList />;
+}

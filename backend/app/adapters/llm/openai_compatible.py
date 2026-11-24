@@ -112,13 +112,23 @@ def _retry_after(exc: openai.APIStatusError) -> float | None:
 
 
 def _map_error(exc: Exception) -> LLMProviderError:
-    if isinstance(exc, openai.APIConnectionError):  # includes timeouts
-        return LLMProviderError(f"connection error: {exc}", retryable=True)
+    if isinstance(exc, openai.APITimeoutError):
+        return LLMProviderError("connection timeout: the provider did not respond in time", retryable=True)
+    if isinstance(exc, openai.APIConnectionError):
+        return LLMProviderError(f"runtime disconnection or unreachable endpoint: {exc}", retryable=True)
     if isinstance(exc, openai.APIStatusError):
         status = exc.status_code
         retryable = status in _RETRYABLE_STATUS or status >= 500
+        friendly = {
+            401: "Invalid API Key",
+            404: "Model or endpoint not found",
+            429: "Rate limit or queue full",
+            502: "Gateway or upstream failure",
+            503: "Model unavailable",
+        }.get(status)
+        detail = f"{friendly} ({exc.message})" if friendly else str(exc.message)
         return LLMProviderError(
-            f"provider returned HTTP {status}: {exc.message}",
+            f"provider returned HTTP {status}: {detail}",
             retryable=retryable,
             status_code=status,
             retry_after=_retry_after(exc) if retryable else None,
@@ -143,6 +153,7 @@ class OpenAICompatibleProvider:
         )
         self._reasoning_models = reasoning_models
         self._no_strict_schema: set[str] = set()  # models that rejected strict json_schema
+        self._no_response_format: set[str] = set()  # gateways that reject response_format altogether
 
     @classmethod
     def from_settings(cls) -> "OpenAICompatibleProvider":
@@ -166,21 +177,23 @@ class OpenAICompatibleProvider:
         json_schema: dict[str, Any] | None,
         tools: list[dict[str, Any]] | None,
         strict: bool,
+        use_response_format: bool = True,
     ) -> dict[str, Any]:
         system_text = system if not cached_context else f"{system}\n\n{cached_context}"
-        if json_schema is not None and not strict:
+        if json_schema is not None and (not strict or not use_response_format):
             system_text = f"{system_text}\n\n{_schema_instructions(json_schema)}"
         body: dict[str, Any] = {
             "model": model,
             "messages": [{"role": "system", "content": system_text}]
             + [_to_openai_message(m) for m in messages],
+            "stream": False,
         }
         if model in self._reasoning_models:
             body["reasoning_effort"] = effort
             body["max_completion_tokens"] = max_tokens
         else:
             body["max_tokens"] = max_tokens
-        if json_schema is not None:
+        if json_schema is not None and use_response_format:
             body["response_format"] = (
                 {
                     "type": "json_schema",
@@ -217,6 +230,7 @@ class OpenAICompatibleProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResult:
         strict = json_schema is not None and model not in self._no_strict_schema
+        use_fmt = json_schema is not None and model not in self._no_response_format
         args: dict[str, Any] = {
             "model": model,
             "system": system,
@@ -228,16 +242,41 @@ class OpenAICompatibleProvider:
             "tools": tools,
         }
         try:
-            response = await self._client.chat.completions.create(**self._request(**args, strict=strict))
+            response = await self._client.chat.completions.create(
+                **self._request(**args, strict=strict, use_response_format=use_fmt)
+            )
         except (openai.BadRequestError, openai.UnprocessableEntityError) as exc:
-            if not strict:
+            if json_schema is None or not use_fmt:
                 raise _map_error(exc) from exc
-            logger.info("model %s rejected strict json_schema; falling back to json_object", model)
-            self._no_strict_schema.add(model)
-            try:
-                response = await self._client.chat.completions.create(**self._request(**args, strict=False))
-            except openai.OpenAIError as exc2:
-                raise _map_error(exc2) from exc2
+            if strict:
+                logger.info("model %s rejected strict json_schema; falling back to json_object", model)
+                self._no_strict_schema.add(model)
+                try:
+                    response = await self._client.chat.completions.create(
+                        **self._request(**args, strict=False, use_response_format=True)
+                    )
+                except (openai.BadRequestError, openai.UnprocessableEntityError) as exc2:
+                    logger.info("model %s rejected json_object (%s); falling back to plain prompt JSON", model, exc2)
+                    if "extra" in str(exc2).lower() or "response_format" in str(exc2).lower():
+                        self._no_response_format.add(model)
+                    try:
+                        response = await self._client.chat.completions.create(
+                            **self._request(**args, strict=False, use_response_format=False)
+                        )
+                    except openai.OpenAIError as exc3:
+                        raise _map_error(exc3) from exc3
+                except openai.OpenAIError as exc2:
+                    raise _map_error(exc2) from exc2
+            else:
+                logger.info("model %s rejected json_object (%s); falling back to plain prompt JSON", model, exc)
+                if "extra" in str(exc).lower() or "response_format" in str(exc).lower():
+                    self._no_response_format.add(model)
+                try:
+                    response = await self._client.chat.completions.create(
+                        **self._request(**args, strict=False, use_response_format=False)
+                    )
+                except openai.OpenAIError as exc2:
+                    raise _map_error(exc2) from exc2
         except openai.OpenAIError as exc:
             raise _map_error(exc) from exc
         return self._to_result(response, model)

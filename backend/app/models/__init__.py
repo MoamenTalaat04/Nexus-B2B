@@ -11,6 +11,7 @@ from app.models.llm_provider import LlmProviderConfig
 from app.models.messaging import ChannelConnection, Conversation, DemoRoute, Message, MessageTemplate
 from app.models.notifications import LearnedInsight, Notification
 from app.models.runs import AgentRun, AgentStep
+from app.models.search_source import SearchSourceConfig
 from app.models.tenants import BusinessSettings, Tenant, User
 
 __all__ = [
@@ -34,6 +35,7 @@ __all__ = [
     "MessageTemplate",
     "Notification",
     "SearchQuery",
+    "SearchSourceConfig",
     "Tenant",
     "TenantMixin",
     "TimestampMixin",

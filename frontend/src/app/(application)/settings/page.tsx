@@ -1,10 +1,6 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { CUSTOMER_ROUTES } from "@/config/routes";
 import { SecuritySettingsPanel } from "@/features/auth/components/security-settings-panel";
 import { CustomerBillingView } from "@/features/billing/components/customer-billing-view";
 import { KnowledgeUploader } from "@/features/knowledge/components/knowledge-uploader";
@@ -48,17 +44,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold tracking-tight text-foreground">Settings</h1>
-        {settings && !settings.onboarding_completed && (
-          <Link href={CUSTOMER_ROUTES.onboarding}>
-            <Button size="sm" variant="outline">
-              <Sparkles className="mr-1.5 size-4 text-primary dark:text-lime-400" />
-              Launch Onboarding Wizard
-            </Button>
-          </Link>
-        )}
-      </div>
+      <h1 className="text-xl font-bold tracking-tight text-foreground">Settings</h1>
 
       <div role="tablist" aria-label="Settings sections" className="flex flex-wrap gap-2 border-b border-border pb-3">
         {SETTINGS_TABS.map((tab) => (

@@ -8,13 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
 import type { SettingsOut } from "@/lib/settings-types";
-import {
-  AutonomyModeValues,
-  FirstTouchModeValues,
-  type AutonomyMode,
-  type FirstTouchMode,
-} from "@/lib/types";
+import type { AutonomyMode, FirstTouchMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  AutonomyModeCardsSelector,
+  FirstTouchModeCardsSelector,
+  LanguageDialectSelector,
+  ToneCardsSelector,
+} from "./agent-behavior-controls";
 
 const WEEKDAYS = [
   { id: 0, label: "Mon" },
@@ -33,7 +34,7 @@ export function AgentSettingsPanel({
   settings: SettingsOut;
   onUpdated: (next: SettingsOut) => void;
 }) {
-  const [language, setLanguage] = useState<"ar-EG" | "en">(settings.language);
+  const [language, setLanguage] = useState<string>(settings.language);
   const [tone, setTone] = useState<"friendly" | "formal">(settings.tone);
   const [autonomyMode, setAutonomyMode] = useState<AutonomyMode>(settings.autonomy_mode);
   const [firstTouchMode, setFirstTouchMode] = useState<FirstTouchMode>(settings.first_touch_mode);
@@ -116,64 +117,11 @@ export function AgentSettingsPanel({
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="agent-lang">Language</Label>
-              <select
-                id="agent-lang"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value as "ar-EG" | "en")}
-                className="h-10 rounded-lg border border-input bg-surface/70 px-3 text-sm dark:border-[#223D27] dark:bg-[#0A140C]"
-              >
-                <option value="ar-EG">Egyptian Arabic (ar-EG)</option>
-                <option value="en">English (en)</option>
-              </select>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="agent-tone">Tone</Label>
-              <select
-                id="agent-tone"
-                value={tone}
-                onChange={(e) => setTone(e.target.value as "friendly" | "formal")}
-                className="h-10 rounded-lg border border-input bg-surface/70 px-3 text-sm dark:border-[#223D27] dark:bg-[#0A140C]"
-              >
-                <option value="friendly">Friendly</option>
-                <option value="formal">Formal</option>
-              </select>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="agent-autonomy">Autonomy mode</Label>
-              <select
-                id="agent-autonomy"
-                value={autonomyMode}
-                onChange={(e) => setAutonomyMode(e.target.value as AutonomyMode)}
-                className="h-10 rounded-lg border border-input bg-surface/70 px-3 text-sm dark:border-[#223D27] dark:bg-[#0A140C]"
-              >
-                {AutonomyModeValues.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {mode.replace(/_/g, " ")}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="agent-first-touch">First-touch mode</Label>
-              <select
-                id="agent-first-touch"
-                value={firstTouchMode}
-                onChange={(e) => setFirstTouchMode(e.target.value as FirstTouchMode)}
-                className="h-10 rounded-lg border border-input bg-surface/70 px-3 text-sm dark:border-[#223D27] dark:bg-[#0A140C]"
-              >
-                {FirstTouchModeValues.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {mode.replace(/_/g, " ")}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="space-y-5">
+            <LanguageDialectSelector value={language} onChange={setLanguage} idPrefix="agent" />
+            <ToneCardsSelector value={tone} onChange={setTone} />
+            <AutonomyModeCardsSelector value={autonomyMode} onChange={setAutonomyMode} />
+            <FirstTouchModeCardsSelector value={firstTouchMode} onChange={setFirstTouchMode} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

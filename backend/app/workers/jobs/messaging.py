@@ -1,7 +1,6 @@
 """Messaging jobs (CONTRACTS section 10, P3-2).
 
 job_send_message(message_id)        send one queued WhatsApp message (services.messaging.send_message_in)
-job_handle_inbound(message_id)      STUB: only logs. D replaces it with the reply pipeline (P3-4).
 job_requeue_stuck_messages          cron every 10 min: re-enqueue queued messages nobody picked up
 """
 
@@ -29,12 +28,6 @@ async def job_send_message(ctx: dict[str, Any], message_id: str) -> dict[str, An
         # The creating transaction may not be committed yet: try again shortly.
         raise Retry(defer=5)
     return {"status": outcome.status, "error": outcome.error}
-
-
-async def job_handle_inbound(ctx: dict[str, Any], message_id: str) -> dict[str, Any]:
-    """Stub (P3-2). D's reply pipeline (P3-4) replaces this: classify → status → reply agent."""
-    logger.info("inbound message %s stored; the reply pipeline (P3-4) is not merged yet", message_id)
-    return {"status": "stub", "message_id": message_id}
 
 
 async def job_requeue_stuck_messages(ctx: dict[str, Any]) -> dict[str, Any]:

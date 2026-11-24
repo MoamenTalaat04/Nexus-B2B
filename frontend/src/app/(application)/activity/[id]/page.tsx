@@ -1,15 +1,10 @@
-"use client";
+import { ActivityDetail } from "@/features/activity/components/activity-detail";
 
-import { useParams } from "next/navigation";
-
-export default function ActivityDetailsPage() {
-  const { id } = useParams<{ id: string }>();
-
-  return (
-    <div className="space-y-1">
-      <h1 className="text-xl font-bold tracking-tight text-foreground">Activity Details</h1>
-      <p className="text-sm text-muted-foreground">ID: {id}</p>
-    </div>
-  );
+export default async function ActivityDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return <ActivityDetail runId={id} />;
 }
-

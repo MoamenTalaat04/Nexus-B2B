@@ -17,11 +17,14 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters import registry
-from app.adapters.base import RegionFilter
+from app.adapters.base import PlaceResult, RegionFilter
+from app.agents.llm import ModelTier, llm_structured
 from app.agents.query_generator import generate_queries, recent_queries
+from app.core.tenancy import get_settings_for
 from app.core.tracing import agent_run
 from app.db import SessionLocal
 from app.models.enums import AgentRunKind, StepType
@@ -29,6 +32,7 @@ from app.models.leads import SearchQuery
 from app.schemas.agent_io import ICP, CompanyProfile
 from app.services import icp_service
 from app.services.leads_ingest import ingest_places
+from app.services.search_registry import build_live_search_source
 from app.workers.queue import enqueue
 
 logger = logging.getLogger("app.jobs.sourcing")
@@ -69,6 +73,72 @@ class SourcingResult:
         }
 
 
+class _SandboxLeadItem(BaseModel):
+    name: str
+    category: str
+    address: str
+    city: str
+    governorate: str
+    website: str | None = None
+    rating: float = 4.5
+    reviews_count: int = 25
+
+
+class _SandboxLeadBatch(BaseModel):
+    leads: list[_SandboxLeadItem] = Field(default_factory=list)
+
+
+async def _generate_sandbox_places(
+    run: Any,
+    *,
+    icp: ICP,
+    profile: CompanyProfile,
+    whitelist: list[str],
+    count: int,
+) -> list[PlaceResult]:
+    regions_text = ", ".join(r.governorate for r in icp.regions) or "Egypt"
+    batch = await llm_structured(
+        run,
+        name="sourcing.sandbox_leads",
+        tier=ModelTier.FAST,
+        effort="low",
+        system=(
+            "You generate realistic synthetic Egyptian B2B prospect businesses for sandbox testing. "
+            "Every business must match the company's ICP and target regions."
+        ),
+        user=(
+            f"Company: {profile.company_name} ({profile.one_liner})\n"
+            f"ICP summary: {icp.summary}\n"
+            f"Target types: {', '.join(icp.target_business_types)}\n"
+            f"Regions: {regions_text}\n"
+            f"Generate {min(count, 10)} realistic synthetic businesses in JSON."
+        ),
+        output_model=_SandboxLeadBatch,
+    )
+    places: list[PlaceResult] = []
+    for idx, item in enumerate(batch.leads):
+        phone = whitelist[idx % len(whitelist)] if whitelist else None
+        places.append(
+            PlaceResult(
+                source="sandbox_llm",
+                source_ref=f"sandbox:{run.run_id}:{idx}",
+                name=item.name,
+                category=item.category,
+                address=item.address,
+                city=item.city,
+                governorate=item.governorate,
+                phone_national=phone,
+                website=item.website,
+                rating=item.rating,
+                reviews_count=item.reviews_count,
+                business_status="OPERATIONAL",
+                types=[item.category],
+                raw={"sandbox": True, "whitelist_phone": phone},
+            )
+        )
+    return places
+
+
 async def run_sourcing(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -76,9 +146,14 @@ async def run_sourcing(
     max_results: int = DEFAULT_MAX_RESULTS,
     run_id: uuid.UUID | None = None,
     trigger: str = "manual",
+    mode: str = "auto",
 ) -> SourcingResult:
     async with agent_run(
-        tenant_id, AgentRunKind.SOURCING, trigger=trigger, input={"max_results": max_results}, run_id=run_id
+        tenant_id,
+        AgentRunKind.SOURCING,
+        trigger=trigger,
+        input={"max_results": max_results, "mode": mode},
+        run_id=run_id,
     ) as run:
         result = SourcingResult(run_id=run.run_id)
         active = await icp_service.get_active_icp(session, tenant_id)
@@ -86,9 +161,40 @@ async def run_sourcing(
             raise SourcingError("no_active_icp", "Generate and save the customer profile (ICP) first.")
         icp = ICP.model_validate(active.icp)
         profile = CompanyProfile.model_validate(active.company_profile)
+
+        if mode == "sandbox":
+            biz_settings = await get_settings_for(session, tenant_id)
+            whitelist = list(biz_settings.demo_whitelist or [])
+            places = await _generate_sandbox_places(
+                run,
+                icp=icp,
+                profile=profile,
+                whitelist=whitelist,
+                count=min(max_results, 10),
+            )
+            result.queries_run = 1
+            ingest = await ingest_places(session, run, tenant_id, places, active.id, limit=max_results)
+            result.created += ingest.created
+            result.duplicates += ingest.duplicates
+            result.skipped += ingest.skipped
+            result.lead_ids.extend(ingest.lead_ids)
+            await session.commit()
+            if result.created > 0:
+                try:
+                    await enqueue("job_score_leads", tenant_id=str(tenant_id), run_id=str(run.run_id))
+                    result.scoring_enqueued = True
+                except Exception as exc:
+                    logger.exception("could not enqueue job_score_leads")
+                    await run.step(
+                        StepType.ERROR, "sourcing.enqueue_scoring_failed", output={"error": str(exc)}
+                    )
+            await run.step(StepType.DECISION, "sourcing.totals", output=result.summary())
+            run.output_summary = result.summary()
+            return result
+
         used = await recent_queries(session, tenant_id)
         plan = await generate_queries(run, icp=icp, profile=profile, already_used=used)
-        source = registry.get_search_source()
+        source = await build_live_search_source() if mode == "live" else registry.get_search_source()
         source_name = getattr(source, "name", "search")
 
         for query in plan.queries:
@@ -158,13 +264,14 @@ async def job_run_sourcing(
     max_results: int = DEFAULT_MAX_RESULTS,
     run_id: str | None = None,
     trigger: str = "manual",
+    mode: str = "live",
 ) -> dict[str, Any]:
     tid = uuid.UUID(str(tenant_id))
     rid = uuid.UUID(str(run_id)) if run_id else None
     async with SessionLocal() as session:
         try:
             result = await run_sourcing(
-                session, tid, max_results=int(max_results), run_id=rid, trigger=trigger
+                session, tid, max_results=int(max_results), run_id=rid, trigger=trigger, mode=mode
             )
         except SourcingError as exc:  # already recorded on the run
             logger.warning("sourcing failed for tenant %s: %s", tid, exc)

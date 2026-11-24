@@ -25,6 +25,7 @@ NULLABLE_FIELDS = {"website"}
 class ProductIn(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
+    kind: Literal["product", "service"] = "product"
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
     price_range: str | None = Field(default=None, max_length=120)  # free text, e.g. "120-250 EGP / piece"
@@ -32,31 +33,51 @@ class ProductIn(BaseModel):
 
 
 class RegionIn(BaseModel):
-    """A governorate from GET /settings/geo; cities empty = the whole governorate."""
+    """A target region (worldwide country + state/governorate + cities/neighborhoods, or map circle)."""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    governorate: str
-    cities: list[str] = Field(default_factory=list, max_length=30)
+    country: str = Field(default="Egypt", min_length=1, max_length=120)
+    governorate: str = Field(min_length=1, max_length=120)
+    cities: list[str] = Field(default_factory=list, max_length=50)
+    lat: float | None = Field(default=None, ge=-90.0, le=90.0)
+    lng: float | None = Field(default=None, ge=-180.0, le=180.0)
+    radius_km: float | None = Field(default=None, gt=0.0, le=500.0)
 
     @model_validator(mode="after")
     def _known_places(self) -> "RegionIn":
-        info = geo_eg.get_governorate(self.governorate)
-        if info is None:
-            raise ValueError(f"unknown governorate {self.governorate!r}; use a name from GET /settings/geo")
-        self.governorate = info.name
-        cities: list[str] = []
+        if self.country.lower() == "egypt":
+            info = geo_eg.get_governorate(self.governorate)
+            if info is not None:
+                self.governorate = info.name
+                cities: list[str] = []
+                for city in self.cities:
+                    if not city:
+                        continue
+                    canonical = geo_eg.canonical_city(info, city) if info.cities else None
+                    name = (canonical or city)[:80]
+                    if name not in cities:
+                        cities.append(name)
+                self.cities = cities
+                return self
+
+        deduped: list[str] = []
         for city in self.cities:
-            if not city:
-                continue
-            canonical = geo_eg.canonical_city(info, city) if info.cities else None
-            if info.cities and canonical is None:
-                raise ValueError(f"unknown city {city!r} in {info.name}; use a name from GET /settings/geo")
-            name = canonical or city[:80]
-            if name not in cities:
-                cities.append(name)
-        self.cities = cities
+            clean = city.strip()[:80]
+            if clean and clean not in deduped:
+                deduped.append(clean)
+        self.cities = deduped
         return self
+
+
+class GeoCircleResolveIn(BaseModel):
+    lat: float = Field(ge=-90.0, le=90.0)
+    lng: float = Field(ge=-180.0, le=180.0)
+    radius_km: float = Field(gt=0.1, le=200.0)
+
+
+class GeoCircleResolveOut(BaseModel):
+    regions: list[RegionIn]
 
 
 class SequenceStepIn(BaseModel):
@@ -102,7 +123,7 @@ class SettingsUpdate(BaseModel):
     ideal_customer_text: str | None = Field(default=None, max_length=5000)
     products: list[ProductIn] | None = Field(default=None, min_length=1, max_length=MAX_PRODUCTS)
     target_regions: list[RegionIn] | None = Field(default=None, min_length=1, max_length=27)
-    language: Literal["ar-EG", "en"] | None = None
+    language: str | None = Field(default=None, min_length=2, max_length=24)
     tone: Literal["friendly", "formal"] | None = None
     allowed_offers: str | None = Field(default=None, max_length=2000)
     max_discount_percent: int | None = Field(default=None, ge=0, le=50)
@@ -220,3 +241,29 @@ class GovernorateOut(BaseModel):
 
 class GeoOut(BaseModel):
     governorates: list[GovernorateOut]
+
+
+class CompanyAiAssistIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    field: Literal["description", "ideal_customer_text"]
+    mode: Literal["generate", "enhance"]
+    company_name: str = Field(default="", max_length=200)
+    website: str | None = Field(default=None, max_length=300)
+    current_text: str = Field(default="", max_length=4000)
+    other_text: str = Field(default="", max_length=4000)
+
+
+class CompanyAiAssistOut(BaseModel):
+    text: str
+    source_summary: str
+
+
+class OfferingsAiExtractOut(BaseModel):
+    items: list[ProductIn]
+    source_summary: str
+
+
+class AiQuotaOut(BaseModel):
+    limit: int
+    remaining: dict[str, int]

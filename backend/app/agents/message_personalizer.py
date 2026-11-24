@@ -120,7 +120,7 @@ def _clean_text(text: str) -> str:
 def _with_link(text: str, assistant_link: str | None, language: str) -> str:
     if not assistant_link:
         return text[:MAX_ASSISTED_TOTAL_CHARS]
-    line = f"{INVITE_EN if language == 'en' else INVITE_AR}\n{assistant_link}"
+    line = f"{INVITE_AR if language.startswith('ar') else INVITE_EN}\n{assistant_link}"
     room = MAX_ASSISTED_TOTAL_CHARS - len(line) - 2
     return f"{text[: max(room, 0)].rstrip()}\n\n{line}"
 
@@ -212,7 +212,7 @@ async def write_assisted(
             return AssistedMessage(
                 text=_with_link(text, assistant_link, profile.language), rationale=result.rationale
             )
-    if profile.language == "en":
+    if profile.language.startswith("en"):
         text = f"Hello {lead.name}, this is {profile.company_name}. {profile.one_liner}"
     else:
         text = f"أهلاً {lead.name}، معاك {profile.company_name}. {profile.one_liner}"

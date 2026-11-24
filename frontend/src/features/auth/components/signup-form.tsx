@@ -19,7 +19,7 @@ import { MockApiError } from "@/lib/mock-api";
 import { cn } from "@/lib/utils";
 
 export function SignupForm({ className }: { className?: string }) {
-  const { sendRegistrationOtp, verifyRegistrationOtp, user, isAuthenticated, isLoading } = useAuth();
+  const { sendRegistrationOtp, verifyRegistrationOtp, user, authProvider, onboardingCompleted, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
 
   const [fullName, setFullName] = useState("");
@@ -45,8 +45,12 @@ export function SignupForm({ className }: { className?: string }) {
 
   useEffect(() => {
     if (isLoading || !isAuthenticated || !user) return;
+    if (authProvider !== "mock" && !onboardingCompleted) {
+      router.replace(CUSTOMER_ROUTES.onboarding);
+      return;
+    }
     router.replace(getDefaultRouteForRole(user.role));
-  }, [isLoading, isAuthenticated, user, router]);
+  }, [isLoading, isAuthenticated, user, authProvider, onboardingCompleted, router]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -98,7 +102,7 @@ export function SignupForm({ className }: { className?: string }) {
         otp: otpCode.trim(),
       });
       setOtpModalOpen(false);
-      router.replace(CUSTOMER_ROUTES.dashboard);
+      router.replace(CUSTOMER_ROUTES.onboarding);
     } catch (err) {
       if (err instanceof ApiError || err instanceof MockApiError) {
         setOtpError(err.message);
@@ -295,8 +299,8 @@ export function SignupForm({ className }: { className?: string }) {
       </Card>
 
       <div className="px-6 text-center text-xs text-balance text-muted-foreground dark:text-lime-200/60 [&_a]:underline [&_a]:underline-offset-4 [&_a]:hover:text-foreground dark:[&_a]:hover:text-lime-200">
-        By clicking continue, you agree to our <Link href="/#footer">Terms of Service</Link> and{" "}
-        <Link href="/#footer">Privacy Policy</Link>.
+        By clicking continue, you agree to our <Link href="/landing-page#footer">Terms of Service</Link> and{" "}
+        <Link href="/landing-page#footer">Privacy Policy</Link>.
       </div>
 
       {otpModalOpen && (

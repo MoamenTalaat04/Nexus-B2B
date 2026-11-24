@@ -1,12 +1,10 @@
 import type { ReactNode } from "react";
 import { AuthBackground } from "@/components/effects/auth-background";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
-import { Pointer } from "@/components/ui/pointer";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="relative flex min-h-svh flex-col items-center justify-center p-6 md:p-10">
-      <Pointer className="fill-primary stroke-white text-primary dark:fill-lime-400 dark:stroke-[#0A140C] dark:text-lime-400" />
       <AuthBackground />
       <div className="fixed top-4 right-4 z-30 rounded-full border border-border/80 bg-card/85 p-1 shadow-sm backdrop-blur-md dark:border-[#223D27] dark:bg-[#112014]/85">
         <ThemeToggle />

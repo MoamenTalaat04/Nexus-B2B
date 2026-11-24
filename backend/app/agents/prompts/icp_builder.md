@@ -16,7 +16,7 @@ precise Ideal Customer Profile (ICP) that a sales agent will use to search Googl
 - `differentiators`: concrete reasons to choose this company that the inputs support (quality, price, delivery,
   range, minimum order…). Up to 5.
 - `faqs`: only questions whose answers are in the inputs (delivery, payment, minimum order, returns). Up to 8.
-- Write in the owner's language (Egyptian Arabic or English as given in `language`); product names may stay as written.
+- Write in the owner's language and regional dialect as given in `language` (e.g. `ar-EG`, `ar-SA`, `en-US`, `fr-FR`); product names may stay as written.
 
 # Task 2: ICP (who should we sell to)
 Think about who actually buys this product in bulk in Egypt, and how a salesperson would find them on Google Maps.

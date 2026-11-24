@@ -1,0 +1,8 @@
+{"id": "cls_interested", "text": "ايوه تمام مهتمين جداً، ممكن تفاصيل أكتر ومكالمة بكرة؟", "expected_intent": "interested"}
+{"id": "cls_wants_offer", "text": "ممكن تبعتلي عرض السعر والكاتالوج لو سمحت؟", "expected_intent": "wants_offer"}
+{"id": "cls_question", "text": "هل عندكم توصيل للإسكندرية ومدة التسليم كام يوم؟", "expected_intent": "question"}
+{"id": "cls_later", "text": "مشغولين دلوقتي، كلمنا أول الشهر الجاي إن شاء الله", "expected_intent": "later"}
+{"id": "cls_management", "text": "عايز أتواصل مع مدير المبيعات أو صاحب الشركة مباشرة", "expected_intent": "wants_management", "expected_human": true}
+{"id": "cls_not_interested", "text": "شكراً لحضرتك، مش محتاجين الخدمة حالياً", "expected_intent": "not_interested"}
+{"id": "cls_opted_out", "text": "وقفوا الرسايل لو سمحتوا وماتتواصلوش تاني", "expected_intent": "opted_out"}
+{"id": "cls_discount", "text": "ممكن خصم 35% لو أخدنا كمية كبيرة؟", "expected_intent": "wants_offer", "expected_min_discount": 35}

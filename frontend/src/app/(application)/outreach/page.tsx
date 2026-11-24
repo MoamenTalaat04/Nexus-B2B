@@ -1,8 +1,5 @@
-export default function OutreachPage() {
-  return (
-    <div className="space-y-1">
-      <h1 className="text-xl font-bold tracking-tight text-foreground">Outreach</h1>
-    </div>
-  );
-}
+import { OutreachWorkspace } from "@/features/outreach/components/outreach-workspace";
 
+export default function OutreachPage() {
+  return <OutreachWorkspace />;
+}

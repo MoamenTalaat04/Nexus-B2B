@@ -49,6 +49,7 @@ interface AuthContextValue {
   tenant: MockTenant | null;
   session: MockSession | null;
   authProvider: "auth0" | "local" | "mock";
+  onboardingCompleted: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<AuthResponse>;
@@ -109,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [tenant, setTenant] = useState<MockTenant | null>(null);
   const [session, setSession] = useState<MockSession | null>(null);
   const [authProvider, setAuthProvider] = useState<"auth0" | "local" | "mock">("local");
+  const [onboardingCompleted, setOnboardingCompleted] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
   const refreshAuth = useCallback(async () => {
@@ -122,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(mapped.user);
         setTenant(mapped.tenant);
         setAuthProvider(backendMe.auth_provider === "auth0" ? "auth0" : "local");
+        setOnboardingCompleted(backendMe.onboarding_completed);
         return;
       } catch {
         // Fall back to mock session if backend cookie is not present (e.g. Admin demo accounts).
@@ -137,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTenant(currentTenant);
       if (currentUser) {
         setAuthProvider("mock");
+        setOnboardingCompleted(true);
       }
     } finally {
       setIsLoading(false);
@@ -160,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(mapped.user);
       setTenant(mapped.tenant);
       setAuthProvider(backendAuth.auth_provider === "auth0" ? "auth0" : "local");
+      setOnboardingCompleted(backendAuth.onboarding_completed);
       return mapped;
     } catch (err) {
       const isServerDown = err instanceof ApiError ? err.status >= 500 : true;
@@ -169,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(result.user);
         setTenant(result.tenant);
         setAuthProvider("mock");
+        setOnboardingCompleted(true);
         return result;
       }
       throw err;
@@ -201,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(mapped.user);
       setTenant(mapped.tenant);
       setAuthProvider(backendAuth.auth_provider === "auth0" ? "auth0" : "local");
+      setOnboardingCompleted(backendAuth.onboarding_completed);
       return mapped;
     },
     [],
@@ -223,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(mapped.user);
       setTenant(mapped.tenant);
       setAuthProvider(backendAuth.auth_provider === "auth0" ? "auth0" : "local");
+      setOnboardingCompleted(backendAuth.onboarding_completed);
       return mapped;
     } catch (err) {
       const isServerDown = err instanceof ApiError ? err.status >= 500 : true;
@@ -261,6 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tenant,
       session,
       authProvider,
+      onboardingCompleted,
       isLoading,
       isAuthenticated: Boolean(user && session),
       login,
@@ -276,6 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       tenant,
       session,
       authProvider,
+      onboardingCompleted,
       isLoading,
       login,
       sendRegistrationOtp,

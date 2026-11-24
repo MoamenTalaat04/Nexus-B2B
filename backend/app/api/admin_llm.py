@@ -17,6 +17,7 @@ from app.schemas.admin_llm import (
     LlmProviderCreate,
     LlmProviderListOut,
     LlmProviderOut,
+    LlmProviderReorderIn,
     LlmProviderTestOut,
     LlmProviderUpdate,
 )
@@ -107,13 +108,16 @@ async def create_llm_provider(
     if body.is_primary:
         await session.execute(update(LlmProviderConfig).values(is_primary=False))
 
+    model_smart = body.model_smart.strip()
+    model_fast = body.model_fast.strip() or model_smart
+
     row = LlmProviderConfig(
         name=body.name.strip(),
         provider_type=body.provider_type,
         base_url=body.base_url.strip().rstrip("/"),
         encrypted_api_key=encrypt_api_key(body.api_key.strip()),
-        model_smart=body.model_smart.strip(),
-        model_fast=body.model_fast.strip(),
+        model_smart=model_smart,
+        model_fast=model_fast,
         reasoning_models=body.reasoning_models.strip(),
         priority=body.priority,
         is_active=body.is_active,
@@ -188,6 +192,18 @@ async def set_primary_llm_provider(
     return _to_out(row)
 
 
+def _friendly_http_error(status: int, detail: str = "") -> str:
+    base = {
+        401: "HTTP 401: Invalid API Key",
+        403: "HTTP 403: Access forbidden for this API key",
+        404: "HTTP 404: Model or endpoint not found",
+        429: "HTTP 429: Rate limit or queue full",
+        502: "HTTP 502: Gateway or upstream failure",
+        503: "HTTP 503: Model unavailable",
+    }.get(status, f"HTTP {status}")
+    return f"{base} — {detail}" if detail else base
+
+
 @router.post(
     "/{provider_id}/test",
     response_model=LlmProviderTestOut,
@@ -202,33 +218,151 @@ async def test_llm_provider(
         raise AppError("not_found", "LLM provider not found.", status_code=404)
 
     api_key = decrypt_api_key(row.encrypted_api_key)
-    url = f"{row.base_url.rstrip('/')}/models"
+    base_url = row.base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {api_key}"}
     started = time.perf_counter()
+
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url, headers={"Authorization": f"Bearer {api_key}"})
-        latency_ms = int((time.perf_counter() - started) * 1000)
-        if res.status_code >= 400:
-            return LlmProviderTestOut(
-                ok=False,
-                status_code=res.status_code,
-                latency_ms=latency_ms,
-                error=f"HTTP {res.status_code}",
+        async with httpx.AsyncClient(timeout=httpx.Timeout(25.0)) as client:
+            # 1-3. Verify Base URL reachability, API key authentication, and model listing
+            models_res = await client.get(f"{base_url}/models", headers=headers)
+            if models_res.status_code >= 400:
+                return LlmProviderTestOut(
+                    ok=False,
+                    status_code=models_res.status_code,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                    error=_friendly_http_error(models_res.status_code),
+                )
+
+            models_payload = models_res.json() if models_res.content else {}
+            model_items = models_payload.get("data", []) if isinstance(models_payload, dict) else []
+            model_ids = [
+                str(item.get("id", "")).strip()
+                for item in model_items
+                if isinstance(item, dict) and item.get("id")
+            ]
+
+            # 4. Verify the configured model identifier is listed (when /models returns a list)
+            if model_ids and row.model_smart not in model_ids:
+                return LlmProviderTestOut(
+                    ok=False,
+                    status_code=404,
+                    latency_ms=int((time.perf_counter() - started) * 1000),
+                    models_count=len(model_ids),
+                    model_checked=row.model_smart,
+                    error=f"HTTP 404: Configured model '{row.model_smart}' not found. Available: {', '.join(model_ids[:5])}",
+                )
+
+            # 5. Send a real non-streaming chat completion request
+            chat_res = await client.post(
+                f"{base_url}/chat/completions",
+                headers={**headers, "Content-Type": "application/json"},
+                json={
+                    "model": row.model_smart,
+                    "messages": [{"role": "user", "content": "Reply with OK only."}],
+                    "max_tokens": 16,
+                    "stream": False,
+                },
             )
-        data = res.json() if res.content else {}
-        models_count = len(data.get("data", [])) if isinstance(data, dict) else 0
-        return LlmProviderTestOut(
-            ok=True,
-            status_code=res.status_code,
-            latency_ms=latency_ms,
-            models_count=models_count,
-        )
-    except Exception as exc:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+
+            if chat_res.status_code >= 400:
+                err_msg = ""
+                try:
+                    err_json = chat_res.json()
+                    if isinstance(err_json, dict):
+                        err_obj = err_json.get("error", err_json)
+                        err_msg = str(err_obj.get("message", "") if isinstance(err_obj, dict) else err_obj)[:200]
+                except ValueError:
+                    err_msg = chat_res.text[:200]
+                return LlmProviderTestOut(
+                    ok=False,
+                    status_code=chat_res.status_code,
+                    latency_ms=latency_ms,
+                    models_count=len(model_ids),
+                    model_checked=row.model_smart,
+                    error=_friendly_http_error(chat_res.status_code, err_msg),
+                )
+
+            chat_payload = chat_res.json() if chat_res.content else {}
+            choices = chat_payload.get("choices", []) if isinstance(chat_payload, dict) else []
+            first_msg = choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {}
+            reply_text = str(first_msg.get("content") or "").strip()
+
+            if not reply_text:
+                return LlmProviderTestOut(
+                    ok=False,
+                    status_code=chat_res.status_code,
+                    latency_ms=latency_ms,
+                    models_count=len(model_ids),
+                    model_checked=row.model_smart,
+                    error="Provider returned HTTP 200 but an empty chat completion response.",
+                )
+
+            return LlmProviderTestOut(
+                ok=True,
+                status_code=chat_res.status_code,
+                latency_ms=latency_ms,
+                models_count=len(model_ids),
+                model_checked=row.model_smart,
+                reply_preview=reply_text[:80],
+            )
+    except httpx.TimeoutException:
         return LlmProviderTestOut(
             ok=False,
             latency_ms=int((time.perf_counter() - started) * 1000),
-            error=str(exc),
+            model_checked=row.model_smart,
+            error="Connection timeout: the provider did not respond within 25s.",
         )
+    except (httpx.ConnectError, httpx.RemoteProtocolError):
+        return LlmProviderTestOut(
+            ok=False,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            model_checked=row.model_smart,
+            error="Runtime disconnection or unreachable Base URL.",
+        )
+    except Exception:
+        return LlmProviderTestOut(
+            ok=False,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            model_checked=row.model_smart,
+            error="Unexpected connection error while testing provider.",
+        )
+
+
+@router.post(
+    "/reorder",
+    response_model=LlmProviderListOut,
+    dependencies=[Depends(_require_super_admin)],
+)
+async def reorder_llm_providers(
+    body: LlmProviderReorderIn,
+    session: AsyncSession = Depends(get_session),
+) -> LlmProviderListOut:
+    rows = await _list_rows(session)
+    by_id = {row.id: row for row in rows}
+    ordered_rows: list[LlmProviderConfig] = []
+    seen: set[uuid.UUID] = set()
+    for pid in body.ordered_ids:
+        if pid in by_id and pid not in seen:
+            ordered_rows.append(by_id[pid])
+            seen.add(pid)
+    for row in rows:
+        if row.id not in seen:
+            ordered_rows.append(row)
+
+    for idx, row in enumerate(ordered_rows):
+        row.priority = idx + 1
+        row.is_primary = idx == 0
+
+    await session.commit()
+    refreshed = await _list_rows(session)
+    return LlmProviderListOut(
+        items=[_to_out(r) for r in refreshed],
+        total=len(refreshed),
+        env_fallback_model_smart=settings.LLM_MODEL_SMART,
+        env_fallback_base_url=settings.LLM_BASE_URL,
+    )
 
 
 @router.delete("/{provider_id}", status_code=204, dependencies=[Depends(_require_super_admin)])

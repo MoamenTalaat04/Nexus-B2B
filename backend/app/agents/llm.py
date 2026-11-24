@@ -54,6 +54,36 @@ MOCK_TOOL_LOOP_TEXT = "(mock LLM) This is a placeholder reply."
 _sleep = asyncio.sleep  # indirection so tests can skip real waiting
 
 
+def _parse_tpm_int(exc: Exception, label: str) -> int | None:
+    match = re.search(rf"\b{label}\s+(\d+)\b", str(exc))
+    return int(match.group(1)) if match else None
+
+
+def _is_payload_too_large(exc: LLMProviderError) -> bool:
+    return exc.status_code == 413 or "413" in str(exc) or "request too large" in str(exc).lower()
+
+
+def _compact_context_lines(text: str, max_chars: int) -> str:
+    """Remove duplicate boilerplate lines first; trim only if still above max_chars."""
+    seen: set[str] = set()
+    kept: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        norm = re.sub(r"\s+", " ", line).lower()
+        if len(norm) >= 12 and norm in seen:
+            continue
+        seen.add(norm)
+        kept.append(line)
+    deduped = "\n".join(kept)
+    if len(deduped) <= max_chars:
+        return deduped
+    # Keep head and tail proportionally so no section at the end is completely lost
+    half = max(400, max_chars // 2)
+    return f"{deduped[:half].rstrip()}\n...\n{deduped[-half:].lstrip()}"
+
+
 class ModelTier(StrEnum):
     SMART = "smart"  # → settings.LLM_MODEL_SMART: reasoning and writing
     FAST = "fast"  # → settings.LLM_MODEL_FAST: bulk classification and scoring
@@ -195,6 +225,9 @@ async def _complete(
     for idx, (provider, model) in enumerate(candidates):
         has_fallback = idx + 1 < len(candidates)
         attempt = 0
+        eff_max_tokens = max_tokens
+        eff_cached_context = cached_context
+        fit_retries = 0
         while True:
             started = time.perf_counter()
             try:
@@ -203,10 +236,10 @@ async def _complete(
                     result = await provider.complete(
                         model=model,
                         system=system,
-                        cached_context=cached_context,
+                        cached_context=eff_cached_context,
                         messages=messages,
                         effort=effort,
-                        max_tokens=max_tokens,
+                        max_tokens=eff_max_tokens,
                         json_schema=json_schema,
                         tools=tools,
                     )
@@ -215,6 +248,31 @@ async def _complete(
                 break
             except LLMProviderError as exc:
                 last_exc = exc
+                if _is_payload_too_large(exc) and fit_retries < 2:
+                    fit_retries += 1
+                    limit = _parse_tpm_int(exc, "Limit") or 8000
+                    requested = _parse_tpm_int(exc, "Requested") or (limit + 1000)
+                    overshoot = max(300, requested - limit)
+                    if eff_max_tokens > 1800:
+                        eff_max_tokens = max(1500, eff_max_tokens - overshoot - 250)
+                        logger.info(
+                            "llm %s: HTTP 413 (Limit=%d, Requested=%d); shrinking max_tokens to %d",
+                            name,
+                            limit,
+                            requested,
+                            eff_max_tokens,
+                        )
+                        continue
+                    if eff_cached_context:
+                        target_ctx_chars = max(1200, (limit - eff_max_tokens - 700) * 2)
+                        eff_cached_context = _compact_context_lines(eff_cached_context, target_ctx_chars)
+                        eff_max_tokens = min(eff_max_tokens, 1500)
+                        logger.info(
+                            "llm %s: HTTP 413 with large context; compacting cached_context to %d chars",
+                            name,
+                            len(eff_cached_context),
+                        )
+                        continue
                 if exc.retryable and attempt < MAX_RETRIES:
                     delay = _backoff(attempt, exc.retry_after)
                     attempt += 1

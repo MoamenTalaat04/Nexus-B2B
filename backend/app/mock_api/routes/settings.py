@@ -70,7 +70,7 @@ class SettingsUpdateIn(BaseModel):
     ideal_customer_text: str | None = None
     products: list[ProductItem] | None = Field(default=None, max_length=30)
     target_regions: list[RegionItem] | None = None
-    language: Literal["ar-EG", "en"] | None = None
+    language: str | None = None
     tone: Literal["friendly", "formal"] | None = None
     allowed_offers: str | None = None
     max_discount_percent: int | None = Field(default=None, ge=0, le=50)

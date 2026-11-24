@@ -7,6 +7,7 @@ import {
   Building2,
   Cpu,
   CreditCard,
+  Globe,
   LayoutDashboard,
   LifeBuoy,
   LogOut,
@@ -42,6 +43,7 @@ const ADMIN_NAV_ITEMS = [
   { label: "Plans", href: ADMIN_ROUTES.plans, icon: Package, superAdminOnly: false },
   { label: "Billing", href: ADMIN_ROUTES.billing, icon: CreditCard, superAdminOnly: true },
   { label: "LLM Providers", href: ADMIN_ROUTES.llmProviders, icon: Cpu, superAdminOnly: true },
+  { label: "Search Sources", href: ADMIN_ROUTES.searchSources, icon: Globe, superAdminOnly: true },
   { label: "Support", href: ADMIN_ROUTES.support, icon: LifeBuoy, superAdminOnly: false },
   { label: "Security", href: ADMIN_ROUTES.security, icon: ShieldCheck, superAdminOnly: false },
 ] as const;
